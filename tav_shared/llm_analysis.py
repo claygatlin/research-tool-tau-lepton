@@ -54,10 +54,11 @@ PROVIDER_ALIASES = {
 }
 
 DEFAULT_MODELS = {
-    "grok": "grok-3-mini",
-    "gemini": "gemini-flash-latest",
-    "openai": "gpt-4o-mini",
-    "claude": "claude-sonnet-4-6",
+    # Prefer gateway-aligned Grok id; override with XAI_MODEL if set
+    "grok": os.environ.get("XAI_MODEL", os.environ.get("GROK_MODEL", "grok-4.5")),
+    "gemini": os.environ.get("GEMINI_MODEL", "gemini-flash-latest"),
+    "openai": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+    "claude": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
 }
 
 

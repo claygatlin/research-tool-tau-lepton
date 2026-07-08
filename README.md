@@ -4,6 +4,41 @@ Interactive curses-based research console for the **Tau Universe / Tav-Superbloc
 
 **Entry point:** `research_tool.py`
 
+## Gateway integration
+
+This tree is merged into the Research **LLM Gateway** (`../gateway.py`):
+
+```bash
+cd /home/wyle-e/Research
+./scripts/llm                 # gateway REPL
+# then: /research   or  /rt   → full curses UI
+#       /rt-status  /rt-modules  /rt-providers  /rt-run …
+
+./scripts/rt                  # launch research_tool UI directly
+./scripts/rt status           # bridge health check
+```
+
+API keys: `config/api_keys.env` (see example) or the same env vars the gateway uses
+(`XAI_API_KEY`, `NVIDIA_API_KEY` / `NV_API_KEY`, `OLLAMA_BASE_URL`, …).
+Gateway persistent memory (name, notes) is passed into the child process env.
+
+## Remote Public archive (SFTP)
+
+Finished datasets are staged locally under `.tav_project_staging/`, then uploaded via
+SFTP/SCP to:
+
+```text
+willieb@10.0.0.183:/home/willieb/Public/ProtonDrive/tav_project/
+```
+
+Corpus sync (`/sync` in the gateway, or `scripts/sync_archive.sh`) targets:
+
+```text
+willieb@10.0.0.183:/home/willieb/Public/tsb_sync/
+```
+
+Disable remote push: `export TAV_REMOTE_TRANSFER=0`.
+
 ## Features
 
 - **Modular menus** — each domain lives in `menus/*/` with thin `*_extension.py` shims at the project root for backward compatibility
@@ -73,9 +108,12 @@ Large datasets and run artifacts are **not** in the repo — they are downloaded
 This directory is a self-contained git export (no venv, artifacts, or secrets). After creating a repo on GitHub:
 
 ```bash
-cd /home/willieb/Public/research_tool
+cd /path/to/research_tool
 ./scripts/push_to_github.sh git@github.com:YOUR_USER/YOUR_REPO.git
 ```
+
+Finished archives for this project live on the remote host under
+`willieb@10.0.0.183:/home/willieb/Public/` (SFTP), not a local Public path.
 
 Or set the remote yourself:
 
