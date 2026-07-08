@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Secrets — never commit
+config/api_keys.env
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts and large generated outputs
+artifacts/
+datasets/
+data_cache/
+finished/
+finished2/
+finishedA/
+residual_diagnostics/
+gamma_diagnostics/
+
+# Large binary / data files (download or fetch at runtime)
+*.root
+*.fits
+AO2D.root
+
+# Local logs and scratch
+error_log.txt
+output
+batch_data.txt
+ignore.txt
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Backup copies
+*.bak
+*.bak.py
+*_BAK*.py
+research_too_1.py
+research_Tool_BAK2.py
+research_tool.bak.py
+
+# Bundled pip installer (use venv + requirements.txt)
+get-pip.py

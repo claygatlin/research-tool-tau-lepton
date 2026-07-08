@@ -1,0 +1,202 @@
+{
+  "main": {
+    "id": "8affea0928b7ba5b",
+    "type": "split",
+    "children": [
+      {
+        "id": "7d1fe38700a680ee",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fa0ac93c8ec8b829",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "rd_instability_and_cylinder_resolution.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "rd_instability_and_cylinder_resolution"
+            }
+          }
+        ],
+        "stacked": true
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "20cc675561c481e4",
+    "type": "split",
+    "children": [
+      {
+        "id": "7bb7c6045b6232d6",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "eaa78f052057e33d",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "2e35a027e5482e6e",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "90654881e60f8aed",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "3b7c42638ca89356",
+    "type": "split",
+    "children": [
+      {
+        "id": "97215180519d3103",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0f7707a57a139f42",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "rd_instability_and_cylinder_resolution.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for rd_instability_and_cylinder_resolution"
+            }
+          },
+          {
+            "id": "6de24601b52dd44a",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "operator_algebra_residual_diagnostics.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from operator_algebra_residual_diagnostics"
+            }
+          },
+          {
+            "id": "c66dab8bb10790db",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "e2fee9ae76e3856d",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "220b5643740a37b3",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "operator_algebra_residual_diagnostics.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of operator_algebra_residual_diagnostics"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "fa0ac93c8ec8b829",
+  "lastOpenFiles": [
+    "session_log_2026-06-30_zenodo_import.md",
+    "operator_algebra_residual_diagnostics.md",
+    "rd_instability_and_cylinder_resolution.md",
+    "tsb_sqrt2_origin_scalar_function.md",
+    "Untitled.base",
+    "Welcome.md",
+    "zenodo_records_import_2026-06-30.md",
+    "Figure_5_DESI_BAO_TauSB_Analysis.md",
+    "2026-06-30.md",
+    "create a link.md",
+    "sound_horizon_tsb_integration.md",
+    "2.5d_bubble_percolations_early_universe.md"
+  ]
+}

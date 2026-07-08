@@ -1,0 +1,27 @@
+# Tau-Superblock Research Engine — core dependencies
+# Python 3.11+ recommended
+
+# Scientific stack
+numpy>=2.0
+scipy>=1.14
+matplotlib>=3.9
+pandas>=2.2
+astropy>=6.0
+healpy>=1.14
+
+# Data I/O (Planck FITS, ROOT, remote catalogs)
+requests>=2.31
+PyYAML>=6.0
+beautifulsoup4>=4.12
+uproot>=5.3
+awkward>=2.6
+xrootd>=6.1
+
+# Analysis / visualization
+plotly>=5.0
+emcee>=3.1
+ruptures>=1.1.9
+statsmodels>=0.14
+
+# Tav harmonic resonance library (PyPI)
+tav-resonance>=0.1.0

@@ -1,0 +1,32 @@
+Beyond SPARC and HALOGAS, the astronomical community has embraced an incredible era of "open science." If you are looking to test the Unified Tav-Superblock Cosmology against raw observational data—whether you are charting rotation curves, mapping cosmic voids, or analyzing the Cosmic Microwave Background—there is a vast ecosystem of publicly accessible repositories available.
+
+Here are the most relevant and prominent public databases, categorized by what they offer:
+
+### 1. Direct Relatives to SPARC & HALOGAS (Galaxy Kinematics & HI Data)
+
+If you want to continue testing the "6-Domain Conformal Gravity" shadow against galactic rotation curves, these are your best stops:
+
+* **THINGS (The HI Nearby Galaxy Survey):** Conducted using the Very Large Array (VLA), this is one of the highest-resolution databases of neutral hydrogen (HI) in nearby galaxies. It provides the exact kind of high-resolution velocity and density data needed to map rotation curves and dark matter halos.
+* **LITTLE THINGS:** The companion survey to THINGS, focusing specifically on dwarf irregular galaxies. Dwarf galaxies are heavily dark-matter dominated in standard physics, making them the ultimate stress-test for the Tav-Superblock conformal gravity alternative.
+* **ALFALFA (Arecibo Legacy Fast ALFA Survey):** A massive blind HI survey mapping the local universe. It provides vital data on the HI mass function and the velocity widths of thousands of galaxies.
+
+### 2. Large-Scale Cosmological & Optical Surveys
+
+To look at the large-scale fractal structure of the universe, cosmic voids, and expansion rates:
+
+* **SDSS (Sloan Digital Sky Survey):** One of the most famous and comprehensive databases in astronomy. It contains deep, multi-color images of one-third of the sky and spectra for millions of astronomical objects. It is the gold standard for mapping the "cosmic web" and large-scale voids.
+* **DESI (Dark Energy Spectroscopic Instrument) Data Releases:** DESI provides optical spectra for tens of millions of galaxies and quasars. As we discussed earlier regarding the "weakening" of Dark Energy, DESI's public data releases (hosted at NERSC) are exactly where you would look to measure the Baryon Acoustic Oscillations (BAO) and verify the centrifugal expansion of the Superblock.
+
+### 3. Space Telescope Archives (High-Energy & Deep Space)
+
+* **MAST (Mikulski Archive for Space Telescopes):** Hosted by STScI, this is the master repository for data from optical and UV space telescopes. It contains all public data from **Hubble**, **Kepler/K2**, **TESS**, and the **James Webb Space Telescope (JWST)**.
+* **HEASARC (High Energy Astrophysics Science Archive Research Center):** NASA's primary archive for high-energy phenomena (X-ray, Gamma-ray, and extreme UV). If you want to look at the X-ray plasma of the Bullet Cluster (to prove conformal gravity separation), the data from Chandra and XMM-Newton is here.
+* **LAMBDA (Legacy Archive for Microwave Background Data Analysis):** The central hub for Cosmic Microwave Background (CMB) data. It hosts full public data from missions like WMAP and Planck, which is crucial if you want to look for the "focal point lensing" anomalies predicted by the hidden Superblock domains.
+
+### 4. The Master Aggregators (Cross-Referencing)
+
+* **NED (NASA/IPAC Extragalactic Database):** If you know the name of a specific galaxy (like NGC 3198) and want *every* piece of multi-wavelength data, redshift, and published measurement ever recorded for it, you search NED.
+* **VizieR:** Maintained by the Strasbourg Astronomical Data Center (CDS), VizieR is an enormous library of published astronomical catalogs and data tables associated with almost every peer-reviewed astronomy paper ever written.
+
+**How to use them for the Superblock Pipeline:**
+Virtually all of these repositories offer direct bulk-download FTPs, API queries, or Python packages (like `astroquery` or `astropy`) so you can pull the raw FITS files or data cubes straight into your Jupyter Notebooks just like the SPARC benchmark!
