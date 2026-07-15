@@ -25,16 +25,24 @@ config/api_keys.env
 # Runtime artifacts and large generated outputs
 artifacts/
 datasets/
+data/
+fits/
+mdArchive/
+**/data/
 data_cache/
 finished/
 finished2/
 finishedA/
 residual_diagnostics/
 gamma_diagnostics/
+config/config.json
+config/set_live_models.sh
+tav_bbn_scan_results.json
 
 # Large binary / data files (download or fetch at runtime)
 *.root
 *.fits
+*.npy
 AO2D.root
 
 # Local logs and scratch
