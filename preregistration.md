@@ -12,7 +12,7 @@
 
 The preregistration is based on the examination of the project's .tex files, which integrate the following foundational components:
 
-* **William Brown**: Origination of the Superblock Theory phenomenological framework (which includes the 8-phase clockwork structure, $n_{\text{hier}}$, the 313.1 MeV floor, and the six domains), the photon bounce mechanism and kinematics (discrete PK mirror bounces between Absolute Past and Absolute Future, redshift as geometric wave-function dispersion, photon–Higgs commutation and effective winding, gravity emergence via path-length deposition into the Weyl tensor), the Topological Exclusion Principle, the empirical program and predictions (CMS 7-fold resonances, DESI dispersion signatures, Casimir phase-dependent effects), analytical summaries, code, and the overarching framework synthesis in the .tex files.
+* **William Brown**: Origination of the Superblock Theory phenomenological framework (which includes the 8-phase clockwork structure, $n_{\text{hier}}$, the 313.1 MeV floor, and the six domains), the photon bounce mechanism and kinematics (discrete PK mirror bounces between Absolute Past and Absolute Future, redshift as geometric wave-function dispersion, photon–Higgs commutation and effective winding, gravity emergence via path-length deposition into the Weyl tensor), the Topological Exclusion Principle, the empirical program and predictions (CMS 7-fold resonances, DESI dispersion signatures, Casimir phase-dependent effects), analytical summaries, code, and the overarching framework synthesis in the .tex files. **This explicitly includes integrating twistor theory and Conformal Cyclic Cosmology (CCC) into the Tav-Superblock framework.**
 * **Ernest "Clay" Gatlin**: The 5D Kaluza-Klein Tau Cylinder (the geometric arena / Tav Topology substrate).
 
 The project .tex files (e.g., `Draft__The_5D_Einstein_Kaluza_Klein_Action_Matrices...`, `The_Tau_Cylinder_as_Geometric_Arena...`, `Analytical_Refutation_of_Raychaudhuri...`, `Rigourus_Emergent_Time_main.tex`, and related files containing photon bounce, Exclusion Principle, harmonic resonance, and empirical predictions) form the primary source base for this preregistration.
@@ -21,7 +21,7 @@ The project .tex files (e.g., `Draft__The_5D_Einstein_Kaluza_Klein_Action_Matric
 
 ## 1. Background and Rationale
 
-The project .tex files establish the photon bounce kinematics, the Topological Exclusion Principle, the empirical predictions and tests (7-fold resonances in CMS/DESI/Casimir channels, redshift dispersion signatures), and the integration of William Brown's Superblock elements (the 8-phase clockwork structure, $n_{\text{hier}}$, the 313.1 MeV floor, and the six domains) with the 5D geometric arena.
+The project .tex files establish the photon bounce kinematics, the Topological Exclusion Principle, the empirical predictions and tests (7-fold resonances in CMS/DESI/Casimir channels, redshift dispersion signatures), and the integration of William Brown's Superblock elements (the 8-phase clockwork structure, $n_{\text{hier}}$, the 313.1 MeV floor, and the six domains) with the 5D geometric arena. Furthermore, these files record the integration of Penrose's twistor theory and CCC into the functional mechanics of the cosmology.
 
 The published papers (including the June 2026 kinematics paper) and the .tex files present a unified framework in which Gatlin's 5D KK Tau Cylinder hosts Brown's Superblock-derived elements. The photon bounce mechanism provides the discrete temporal refresh, and the Topological Exclusion Principle enforces occupancy rules on the phase slices.
 
@@ -34,9 +34,9 @@ This v4.0 preregistration is based directly on the content and structure of the 
 ### Core Geometric Objects
 
 * **5D Kaluza-Klein Tau Cylinder (Gatlin)**: The geometric arena (macroscopically scaled compactified $S^1_\tau$).
-* **Photon Bounce Kinematics (Brown)**: Photons execute high-frequency discrete bounces between Absolute Past ($\Phi_8^P$) and Absolute Future ($\Phi_8^F$) nodes inside Planck-Kerr ergosphere mirrors. Redshift is geometric wave-function dispersion. Gravity emerges from discrete path-length deposition into the Weyl tensor. Macro $d\tau_{\text{local}} = 0$ is the averaged observation of the active refresh cycle.
+* **Photon Bounce Kinematics & Twistor Integration (Brown)**: Photons execute high-frequency discrete bounces between Absolute Past ($\Phi_8^P$) and Absolute Future ($\Phi_8^F$) nodes inside Planck-Kerr ergosphere mirrors. Redshift is geometric wave-function dispersion. Gravity emerges from discrete path-length deposition into the Weyl tensor, structurally utilizing twistor space as the functional backend. Macro $d\tau_{\text{local}} = 0$ is the averaged observation of the active refresh cycle.
 * **Topological Exclusion Principle (Brown)**: No two identical fermionic-like excitations occupy the same $(\text{domain}_i, \text{phase}_k)$ slot unless the configuration closes under the full 142857 cycle without reset-phase overlap. Violations incur the 313.1 MeV floor.
-* **Core Superblock Elements (Brown)**: The 8-phase engine ($\text{Aut}(\mathbb{O}) \cong G_2$) provides the clockwork; $n_{\text{hier}} \approx 45.8$ provides hierarchical binding; six domains host staggered 3+1D physics; phenomenological elements include resonance predictions and falsification targets.
+* **Core Superblock Elements & CCC (Brown)**: The 8-phase engine ($\text{Aut}(\mathbb{O}) \cong G_2$) provides the clockwork; $n_{\text{hier}} \approx 45.8$ provides hierarchical binding; six domains host staggered 3+1D physics; phenomenological elements include resonance predictions and falsification targets. Conformal boundaries bridge sequential aeons, drawing directly on Conformal Cyclic Cosmology mechanics.
 * **Integrated 5D EKK Substrate (Brown's Synthesis)**: Generalized line element incorporating the 5D KK Tau Cylinder with the photon bounce and Exclusion rules.
 
 ### Key Equations with Complete Variable/Function Key
@@ -115,7 +115,7 @@ All equations are preserved under the conformal $n_{\text{hier}}$ mapping in the
 
 **H6 (Hierarchical Binding & Multi-Scale Consistency)**: The framework integrates $n_{\text{hier}} \approx 45.8$ and the 313.1 MeV floor, preserving consistency across scales in the analyses. 7-fold resonances are self-similar.
 
-**H7 (Merger-Specific Integration)**: Each photon bounce deposits a discrete path-length quantum into the metric via Weyl compression inside the 5D KK Tau Cylinder, under the Topological Exclusion Principle. Prediction: Photon travel distance correlations with gravitational anomalies.
+**H7 (Merger-Specific Integration & Twistor Foundations)**: Each photon bounce deposits a discrete path-length quantum into the metric via Weyl compression inside the 5D KK Tau Cylinder, under the Topological Exclusion Principle. Twistor conformal geometries dictate the boundaries. Prediction: Photon travel distance correlations with gravitational anomalies and CCC-aligned cyclic crossovers.
 
 **Falsification Criteria**: Absence of 7-fold patterns in CMS data; redshift residuals preferring $\Lambda\text{CDM}$ over Eq. (2); no Casimir 1/7 sidebands; breach of 313.1 MeV floor; breakdown of $n_{\text{hier}}$ self-similarity.
 
@@ -126,7 +126,7 @@ All equations are preserved under the conformal $n_{\text{hier}}$ mapping in the
 **Theoretical Derivation Pipeline**:
 
 * Start from the 5D KK Tau Cylinder (geometric arena).
-* Integrate William Brown's elements: the 8-phase clockwork structure, $n_{\text{hier}}$, 313.1 MeV floor, six domains, and phenomenological framework.
+* Integrate William Brown's elements: the 8-phase clockwork structure, $n_{\text{hier}}$, 313.1 MeV floor, six domains, the integration of twistor theory/CCC (Penrose), and the broader phenomenological framework.
 * Apply the Topological Exclusion Principle and photon bounce kinematics (discrete bounces, Eq. 2 dispersion, path-length deposition).
 * Project via twistor averaging.
 * Derive signatures and preserve under $n_{\text{hier}}$ mapping.
@@ -159,7 +159,7 @@ All code, modules, and analytical outputs in the project repository form the pri
 
 The published papers and .tex files demonstrate the integrated framework. Short-term: Complete CMS photon kinematics analysis. Medium-term: DESI and Casimir results for publication. Governance: All future work will reference this v4.0 preregistration and the examined project manuscripts as primary foundational sources.
 
-**Status Update (v4.0)**: This preregistration is based on direct examination of the project .tex files. The framework successfully unifies the 5D Kaluza-Klein Tau Cylinder with William Brown's 8-phase clockwork structure, $n_{\text{hier}}$, 313.1 MeV floor, six domains, phenomenological elements, and the Topological Exclusion Principle. The framework is ready for publication and empirical testing.
+**Status Update (v4.0)**: This preregistration is based on direct examination of the project .tex files. The framework successfully unifies the 5D Kaluza-Klein Tau Cylinder with William Brown's 8-phase clockwork structure, $n_{\text{hier}}$, 313.1 MeV floor, six domains, phenomenological elements, twistor/CCC integration, and the Topological Exclusion Principle. The framework is ready for publication and empirical testing.
 
 ---
 
@@ -167,6 +167,7 @@ The published papers and .tex files demonstrate the integrated framework. Short-
 
 * All project .tex files (examined): `Draft__The_5D_Einstein_Kaluza_Klein_Action_Matrices...`, `The_Tau_Cylinder_as_Geometric_Arena...`, `Analytical_Refutation_of_Raychaudhuri...`, `Rigourus_Emergent_Time_main.tex`, `Clairification_of_derivation_of_313_1_MeV_ground_floor_main.tex`, and related files containing photon bounce, Exclusion Principle, harmonic resonance, and empirical predictions.
 * Published papers: `The_Kinematics_of_Atemporal_Photon_Propagation... .pdf` (William Wylde, June 2026) and related project outputs.
+* Foundational Context: Penrose, R. Conformal Cyclic Cosmology & Twistor Theory (integrated into framework by William Brown).
 * Supporting project notes and analytical records.
 
 **End of Unified Preregistration v4.0**
