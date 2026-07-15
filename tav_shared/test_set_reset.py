@@ -35,6 +35,8 @@ from tav_shared.tav_project_paths import TAU_SUPERBLOCK_ROOT as PROJECT_ROOT
 PLANCK_FITS_DIR = PROJECT_ROOT / "fits"
 INTEGRATOR_FITS_DIR = PROJECT_ROOT / "datasets" / "fits"
 FRB_DATA_DIR = PROJECT_ROOT / "datasets" / "frb"
+CERN_DATA_DIR = PROJECT_ROOT / "datasets" / "cern"
+CERN_PULL_DONE = CERN_DATA_DIR / "done.txt"
 SPARC_DATA_DIR = PROJECT_ROOT / "datasets" / "sparc"
 INTEGRATOR_ARTIFACT_SUBDIR = ARTIFACTS_DIR / "tav_integrator"
 
@@ -158,6 +160,14 @@ def _build_specs() -> dict[str, TestSetResetSpec]:
                 (all_finished_a, "chime_frb_catalog*.csv"),
                 (all_finished_a, "sdss_void_catalog*.csv"),
             ),
+        ),
+        "CERN_OPENDATA": TestSetResetSpec(
+            module_tag="CERN_OPENDATA",
+            menu_titles=("CERN Open Data",),
+            ledgers=(CERN_PULL_DONE,),
+            processed_prefixes=("cern:",),
+            log_slug="cern_opendata",
+            archive_delete=((all_finished_a, "cern_*"),),
         ),
         "TAU_SB_DESI": TestSetResetSpec(
             module_tag="TAU_SB_DESI",

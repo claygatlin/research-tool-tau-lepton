@@ -38,11 +38,16 @@ from scipy.stats import chi2
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+from tav_shared.artifact_paths import (
+    ARTIFACTS_DIR,
+    TestSlug,
+    artifact_path,
+    compose_dataset_slug,
+)
 from tav_shared.tav_project_paths import TAU_SUPERBLOCK_ROOT
 from menus.astronomical.desi.fetcher import DATASETS_DIR, DEFAULT_COBAYA_ROOT
 
 PROJECT_ROOT = TAU_SUPERBLOCK_ROOT
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 
 # === TSB framework constants (sound_horizon_tsb_integration.md) ===
 M0_MEV: float = 313.1  # conformal mass-gap / geometric friction floor (MeV)
@@ -53,8 +58,12 @@ DELTA_N_PLASMA: float = 10.74  # hierarchical steps QCD (313.1 MeV) → recombin
 TAU_RESONANCE_PERIOD: float = 7.0  # s-units; expected frequency f = 1/7
 TAU_PERIOD: float = TAU_RESONANCE_PERIOD  # alias used in sound-horizon docs
 GAMMA_REFERENCE: float = 10.0  # nominal τ-cylinder stretch γ₀
-RD_OBSERVED_MPC: float = 147.0  # observed drag-epoch sound horizon (Mpc)
+RD_OBSERVED_MPC: float = 147.09  # Planck 2018 / DESI DR2 sound horizon (Mpc)
 RD_OBSERVED_ERR_MPC: float = 0.26
+KAPPA_LEAK_DEFAULT: float = 0.015  # photon dispersion default (JAX pipeline 2026-07-09)
+H0_FIDUCIAL_KM_S_MPC: float = 68.5  # DESI DR2 + BBN reference H₀
+H0_H_UNITS: float = 100.0  # h=1 convention for D_C in h⁻¹ Mpc integrals
+OMEGA_M_FIDUCIAL: float = 0.2975  # DESI DR2 flat ΛCDM Ω_m
 TSB_RD_GAMMA_FALLBACK: float = 8.8511  # typical auto-calibrated γ (ALL_GCcomb DH_only)
 
 # === WHIM / cosmological web (Sonato paper) ===
@@ -72,6 +81,11 @@ MCMC_BURN_IN_DEFAULT: int = 500
 CHANGPOINTS_MIN_N: int = 2
 PRODUCTION_PIPELINE_MIN_N: int = 8
 TAV_RESONANCE_MIN_N: int = 8
+# Legacy+DESI stack: keep distinct legacy z bins (n≈9 DH) vs default dedupe (n≈7)
+HIGH_POWER_DEDUPE_Z_TOL: float = 0.0
+STANDARD_DEDUPE_Z_TOL: float = 0.02
+R_TAU_MPC: float = 7.0
+GAMMA6_HEX: float = 1.4050
 
 
 def mcmc_burn_in_for_steps(n_steps: int) -> int:
@@ -88,6 +102,17 @@ DESI_TRACERS: dict[str, str] = {
     "QSO_GCcomb": "QSO sample",
     "Lya_GCcomb": "Lyα forest",
 }
+
+# Reproducible multi-tracer stack order (BGS → LRG → ELG → QSO → Lyα)
+TRACER_STACK_ORDER: tuple[str, ...] = (
+    "BGS_BRIGHT-21.35_GCcomb",
+    "LRG_GCcomb_z0.4-0.6",
+    "LRG_GCcomb_z0.6-0.8",
+    "LRG+ELG_LOPnotqso_GCcomb",
+    "ELG_LOPnotqso_GCcomb_z1.1-1.6",
+    "QSO_GCcomb",
+    "Lya_GCcomb",
+)
 
 
 def _utc_now() -> datetime:
@@ -192,7 +217,9 @@ DATA_MODE_DH_ONLY: str = "DH_only"
 DATA_MODE_DM_ONLY: str = "DM_only"
 DATA_MODE_JOINT: str = "Joint_DH_DM"
 DATA_MODE_DEFAULT: str = DATA_MODE_DH_ONLY
-DATA_MODE: str = "DH_only"     # Strongly recommended
+DATA_MODE_METHOD10_DEFAULT: str = DATA_MODE_DM_ONLY  # aligns with DR2 D_M/r_d evaluation
+DATA_MODE_PUBLICATION_DEFAULT: str = DATA_MODE_DM_ONLY
+DATA_MODE: str = "DH_only"     # default production scan (DH_only); Method 10 uses DM_only
 # DATA_MODE = "DM_only"
 # DATA_MODE = "Joint_DH_DM"    # Mixed channels — not recommended for single-template fits
 TRACER: str = "ALL_GCcomb"
@@ -431,6 +458,24 @@ def list_desi_tracers(local_path: str | Path | None = None) -> list[str]:
         if match:
             tracers.append(match.group(1))
     return tracers
+
+
+def ordered_tracers_for_stack(
+    local_path: str | Path | None = None,
+    *,
+    stack_order: tuple[str, ...] | None = None,
+) -> list[str]:
+    """
+    Tracers for combined DR2 stack in fixed order, then any extras (sorted).
+
+    Excludes ALL_GCcomb. Unknown cache files append alphabetically for stability.
+    """
+    available = set(list_desi_tracers(local_path))
+    available.discard("ALL_GCcomb")
+    order = stack_order or TRACER_STACK_ORDER
+    ordered = [t for t in order if t in available]
+    extras = sorted(available - set(ordered))
+    return ordered + extras
 
 
 def load_desi_from_cobaya_repo(
@@ -912,15 +957,19 @@ def load_combined_dr2_data(
     *,
     local_path: str | Path | None = None,
     gamma: float = 10.0,
+    dedupe_z_tol: float | None = None,
 ) -> dict[str, Any]:
     """
     Stack per-tracer DR2 rows (excludes ALL_GCcomb) for the requested DATA_MODE.
 
     Yields the same redshift coverage as ALL_GCcomb but tags each row with its
     tracer provenance (useful for jackknife / batch diagnostics).
+
+    Set ``dedupe_z_tol=0`` to retain all z bins (maximum n for Lomb resolution).
     """
     mode_key = normalize_data_mode(mode)
-    tracers = [t for t in list_desi_tracers(local_path) if t != "ALL_GCcomb"]
+    z_tol = STANDARD_DEDUPE_Z_TOL if dedupe_z_tol is None else float(dedupe_z_tol)
+    tracers = ordered_tracers_for_stack(local_path)
     blocks: list[dict[str, Any]] = []
     for tracer in tracers:
         try:
@@ -942,10 +991,12 @@ def load_combined_dr2_data(
         label=f"DESI_DR2_{mode_key}_combined",
         tracer=COMBINED_DR2_TRACER,
         data_mode=mode_key,
-        dedupe_z_tol=0.02,
+        dedupe_z_tol=z_tol,
         prefer_last=True,
     )
     stacked["s"] = s_from_z(stacked["z"], gamma=gamma)
+    stacked["tracer_stack_order"] = tracers
+    stacked["dedupe_z_tol"] = z_tol
     return stacked
 
 
@@ -956,12 +1007,17 @@ def load_extended_bao_data(
     tracer: str = TRACER,
     gamma: float = 10.0,
     legacy_keys: Sequence[str] | None = None,
+    dedupe_z_tol: float = STANDARD_DEDUPE_Z_TOL,
+    high_power_stack: bool = False,
 ) -> dict[str, Any]:
     """
     DESI DR2 + BOSS/eBOSS stack for extended s-space coverage.
 
-    Legacy tables are prepended; near-duplicate redshifts (|Δz|≤0.02) defer to DESI.
+    Legacy tables are prepended. Default |Δz|≤0.02 dedupe defers to DESI; set
+    ``high_power_stack=True`` (or ``dedupe_z_tol=0``) to retain distinct legacy bins.
     """
+    if high_power_stack:
+        dedupe_z_tol = HIGH_POWER_DEDUPE_Z_TOL
     mode_key = normalize_data_mode(mode)
     quantity_filter = data_mode_to_quantity_filter(mode_key)
     blocks: list[dict[str, Any]] = []
@@ -987,15 +1043,18 @@ def load_extended_bao_data(
     desi["survey"] = f"DESI DR2 ({tracer})"
     blocks.append(desi)
 
+    label_suffix = "_high_power" if dedupe_z_tol <= 0.0 else ""
     stacked = _stack_bao_blocks(
         blocks,
-        label=f"DESI_DR2+LEGACY_{mode_key}_{tracer}",
+        label=f"DESI_DR2+LEGACY_{mode_key}_{tracer}{label_suffix}",
         tracer=EXTENDED_BAO_TRACER,
         data_mode=mode_key,
-        dedupe_z_tol=0.02,
+        dedupe_z_tol=dedupe_z_tol,
         prefer_last=True,
     )
     stacked["s"] = s_from_z(stacked["z"], gamma=gamma)
+    stacked["high_power_stack"] = dedupe_z_tol <= 0.0
+    stacked["dedupe_z_tol"] = dedupe_z_tol
     return stacked
 
 
@@ -1354,6 +1413,59 @@ def ade_dark_energy_modulation(
     return amplitude * envelope * np.cos(omega * z_arr + phase)
 
 
+def comoving_distance_hmpc(
+    z: np.ndarray | list[float],
+    *,
+    om: float = OMEGA_M_FIDUCIAL,
+    h0_h: float = H0_H_UNITS,
+) -> np.ndarray:
+    """Flat ΛCDM comoving distance D_C(z) in h⁻¹ Mpc (H₀=100 h convention)."""
+    z_arr = np.asarray(z, dtype=float)
+    if z_arr.size == 0:
+        return np.array([], dtype=float)
+    z_max = float(np.max(z_arr))
+    n = max(128, int(z_max * 64) + 1)
+    zg = np.linspace(0.0, z_max * 1.05 + 1e-6, n)
+    ez = np.sqrt(om * (1.0 + zg) ** 3 + (1.0 - om))
+    integrand = 1.0 / ez
+    dz = np.diff(zg, prepend=0.0)
+    dc = (299792.458 / h0_h) * np.cumsum(0.5 * (integrand + np.roll(integrand, 1)) * dz)
+    dc[0] = 0.0
+    return np.interp(z_arr, zg, dc)
+
+
+def hubble_distance_hmpc(
+    z: np.ndarray | list[float],
+    *,
+    om: float = OMEGA_M_FIDUCIAL,
+    h0_h: float = H0_H_UNITS,
+) -> np.ndarray:
+    """Hubble distance D_H(z) = c/H(z) in h⁻¹ Mpc."""
+    z_arr = np.asarray(z, dtype=float)
+    ez = np.sqrt(om * (1.0 + z_arr) ** 3 + (1.0 - om))
+    return 299792.458 / (h0_h * ez)
+
+
+def w0wa_dark_energy_modulation(
+    z: np.ndarray,
+    *,
+    w0: float = -0.8,
+    wa: float = -0.5,
+    amplitude_scale: float = 1.0,
+) -> np.ndarray:
+    """
+    CPL dynamical dark energy correction (DESI DR2 preferred quadrant: w₀ > −1, w_a < 0).
+
+    Phenomenological distance-integral proxy on BAO observables:
+    w(a) = w₀ + w_a(1 − a),  a = 1/(1+z).
+    """
+    z_arr = np.asarray(z, dtype=float)
+    a = 1.0 / (1.0 + z_arr)
+    w_a_cpl = w0 + wa * (1.0 - a)
+    integral_proxy = (w0 + 1.0) * np.log1p(z_arr) + wa * z_arr / (1.0 + z_arr)
+    return amplitude_scale * 0.01 * integral_proxy * (1.0 + 0.5 * (w_a_cpl + 1.0))
+
+
 def tau_sb_hierarchical_step(
     z: np.ndarray,
     transition_zs: list[float] | None = None,
@@ -1365,6 +1477,40 @@ def tau_sb_hierarchical_step(
     for zt in transition_zs:
         step += amplitude * np.tanh(10 * (z - zt))
     return step
+
+
+def tau_sb_fit_prediction(
+    z: np.ndarray,
+    baseline_coeffs: np.ndarray | Sequence[float],
+    *,
+    A_osc_frac: float,
+    phase_rad: float = 0.0,
+    hier_frac: float = 0.0,
+    gamma: float = 10.0,
+    period: float = TAU_RESONANCE_PERIOD,
+    amplitude_scale: float,
+    use_hier: bool = True,
+) -> np.ndarray:
+    """
+    Noiseless Tau-SB model vector — identical structure to :meth:`TauSBScanner.fit_tau_sb_model`.
+    """
+    z_arr = np.asarray(z, dtype=float)
+    coeffs = np.asarray(baseline_coeffs, dtype=float)
+    s = s_from_z(z_arr, gamma=gamma)
+    baseline = np.polyval(coeffs, z_arr)
+    osc = tau_sb_oscillatory_residual(
+        s,
+        A=float(A_osc_frac),
+        period=period,
+        phase=float(phase_rad),
+        amplitude_scale=float(amplitude_scale),
+    )
+    hier = (
+        tau_sb_hierarchical_step(z_arr, amplitude=float(hier_frac) * amplitude_scale * 0.01)
+        if use_hier
+        else 0.0
+    )
+    return baseline + osc + hier
 
 
 def tau_sb_model_scale_dependent(
@@ -1619,6 +1765,7 @@ class DesiScanResult:
     changepoints: dict[str, Any] | None = None
     injection_recovery: dict[str, Any] | None = None
     joint_fit: dict[str, Any] | None = None
+    nested_evidence: dict[str, Any] | None = None
     tav_harmonics: dict[str, Any] | None = None
     power_assessment: dict[str, Any] | None = None
     gamma_diagnostics: dict[str, Any] | None = None
@@ -1822,6 +1969,13 @@ class DesiScanResult:
                 f"r_d,eff={jf['rd_mpc_effective']:.2f} Mpc, "
                 f"friction shift={jf['friction_shift_fraction']:.2e}"
             )
+        if self.nested_evidence:
+            ne = self.nested_evidence
+            lines.append(
+                f"Nested evidence (dynesty): Δln Z(Tau-SB−aDE)="
+                f"{ne.get('delta_log_evidence_tau_minus_ade', float('nan')):+.2f} "
+                f"→ favors {ne.get('favored_model', 'n/a')}"
+            )
         if self.dipole:
             method = self.dipole.get("method", "healpy_l1")
             lines.append(
@@ -1972,11 +2126,24 @@ class TauSBScanner:
         n_data = len(z)
         observed = np.asarray(observable, dtype=float)
 
-        def _fit(model_builder: Callable, p0: list[float], n_params: int, name: str) -> ModelFitResult:
+        def _fit(
+            model_builder: Callable,
+            p0: list[float],
+            n_params: int,
+            name: str,
+            *,
+            bounds: list[tuple[float | None, float | None]] | None = None,
+            method: str = "Nelder-Mead",
+        ) -> ModelFitResult:
             def objective(p: np.ndarray) -> float:
                 return gaussian_chi2(observed, model_builder(p, z, s), err=err, cov=cov)
 
-            res = optimize.minimize(objective, p0, method="Nelder-Mead")
+            if bounds is not None:
+                res = optimize.minimize(
+                    objective, p0, method="L-BFGS-B", bounds=bounds
+                )
+            else:
+                res = optimize.minimize(objective, p0, method=method)
             params = res.x
             pred = model_builder(params, z, s)
             chi2_val = gaussian_chi2(observed, pred, err=err, cov=cov)
@@ -1991,6 +2158,13 @@ class TauSBScanner:
                 model_at_z=lambda zz, mb=model_builder, pp=params: mb(pp, zz, s_from_z(zz, gamma_used)),
             )
 
+        from menus.astronomical.desi.prior_bounds import (
+            ADE_ZSTAR_MIN,
+            ade_amplitude_bounds,
+            ade_omega_bounds,
+            ade_z_star_bounds,
+        )
+
         amp_scale = _oscillation_scale(observed)
         deg = _baseline_degree(n_data, extra_params=5)
 
@@ -2004,7 +2178,7 @@ class TauSBScanner:
                 amplitude=p[deg + 1] * amp_scale * 0.01,
                 omega=p[deg + 2],
                 phase=p[deg + 3],
-                z_star=max(p[deg + 4], 0.05),
+                z_star=max(p[deg + 4], ADE_ZSTAR_MIN),
             )
             return base + ade
 
@@ -2020,12 +2194,41 @@ class TauSBScanner:
             hier = tau_sb_hierarchical_step(zz, amplitude=p[deg + 3] * amp_scale * 0.01)
             return base + osc + hier
 
-        lcdm = _fit(lcdm_model, [float(np.mean(observed)), 0.0, 0.0][: deg + 1], deg + 1, "ΛCDM (poly)")
+        def w0wa_model(p: np.ndarray, zz: np.ndarray, _ss: np.ndarray) -> np.ndarray:
+            base = np.polyval(p[: deg + 1], zz)
+            de = w0wa_dark_energy_modulation(
+                zz,
+                w0=p[deg + 1],
+                wa=p[deg + 2],
+                amplitude_scale=amp_scale,
+            )
+            return base + de
+
+        poly_bounds = [(None, None)] * (deg + 1)
+        lcdm = _fit(
+            lcdm_model,
+            [float(np.mean(observed)), 0.0, 0.0][: deg + 1],
+            deg + 1,
+            "ΛCDM (poly)",
+        )
+        a_lo, a_hi = ade_amplitude_bounds()
+        o_lo, o_hi = ade_omega_bounds()
+        z_lo, z_hi = ade_z_star_bounds()
+        ade_bounds = (
+            poly_bounds
+            + [
+                (a_lo, a_hi),
+                (o_lo, o_hi),
+                (-np.pi, np.pi),
+                (z_lo, z_hi),
+            ]
+        )
         ade = _fit(
             ade_model,
             list(lcdm.params[: deg + 1]) + [0.01, 2.0, 0.0, 0.5],
             deg + 5,
             "aDE (axion+Λ)",
+            bounds=ade_bounds,
         )
         tau_sb = _fit(
             tau_sb_model,
@@ -2033,8 +2236,22 @@ class TauSBScanner:
             deg + 4,
             "Tau-SB (1/7 + hier)",
         )
+        w0wa_bounds = (
+            poly_bounds
+            + [
+                (-1.15, -0.55),  # DESI DR2 quadrant: w₀ > −1
+                (-1.8, -0.05),   # DESI DR2 quadrant: w_a < 0
+            ]
+        )
+        w0wa = _fit(
+            w0wa_model,
+            list(lcdm.params[: deg + 1]) + [-0.85, -0.6],
+            deg + 3,
+            "w0waCDM (CPL DE)",
+            bounds=w0wa_bounds,
+        )
 
-        fits = [lcdm, ade, tau_sb]
+        fits = [lcdm, ade, w0wa, tau_sb]
         ranking = sorted(fits, key=lambda f: f.aic)
         delta_aic = {f.name: f.aic - ranking[0].aic for f in fits}
         delta_bic = {f.name: f.bic - ranking[0].bic for f in fits}
@@ -2042,7 +2259,9 @@ class TauSBScanner:
         bayes = {
             "vs_lcdm": _bayes_factor_from_delta_bic(tau_sb.bic - lcdm.bic),
             "vs_ade": _bayes_factor_from_delta_bic(tau_sb.bic - ade.bic),
-            "note": "BF>1 favors Tau-SB over comparison model (BIC approximation)",
+            "vs_w0wa": _bayes_factor_from_delta_bic(tau_sb.bic - w0wa.bic),
+            "w0wa_vs_lcdm": _bayes_factor_from_delta_bic(w0wa.bic - lcdm.bic),
+            "note": "BF>1 favors first-named model (BIC approximation)",
         }
 
         self.results["model_comparison"] = {
@@ -2054,7 +2273,12 @@ class TauSBScanner:
             "best_model": ranking[0].name,
             "lcdm": lcdm,
             "ade": ade,
+            "w0wa": w0wa,
             "tau_sb": tau_sb,
+            "w0wa_params": {
+                "w0": float(w0wa.params[deg + 1]),
+                "wa": float(w0wa.params[deg + 2]),
+            },
         }
         return self.results["model_comparison"]
 
@@ -2070,6 +2294,7 @@ class TauSBScanner:
         fit_phase: bool = True,
         fit_hier: bool | None = None,
         fixed_A_frac: float = 0.01,
+        hier_bounds: tuple[float, float] | None = None,
     ) -> dict[str, Any]:
         from menus.astronomical.desi.stats import (
             compute_model_comparison,
@@ -2116,15 +2341,26 @@ class TauSBScanner:
             )
         osc_p0: list[float] = []
         osc_bounds: list[tuple[float | None, float | None]] = []
+        from menus.astronomical.desi.prior_bounds import (
+            hier_frac_bounds as _hier_bounds_default,
+            tau_amplitude_frac_bounds,
+        )
+
+        a_lo, a_hi = tau_amplitude_frac_bounds(mode="fit")
         if fit_A:
             osc_p0.append(0.01)
-            osc_bounds.append((-0.25, 0.25))
+            osc_bounds.append((a_lo, a_hi))
         if fit_phase:
             osc_p0.append(0.0)
             osc_bounds.append((-np.pi, np.pi))
         if use_hier:
             osc_p0.append(0.001)
-            osc_bounds.append((-0.05, 0.05))
+            hb = (
+                hier_bounds
+                if hier_bounds is not None
+                else _hier_bounds_default(mode="fit")
+            )
+            osc_bounds.append((float(hb[0]), float(hb[1])))
         p0 = list(baseline_params[: deg + 1]) + osc_p0
         bounds: list[tuple[float | None, float | None]] = (
             [(None, None)] * (deg + 1) + osc_bounds
@@ -2257,6 +2493,11 @@ class TauSBScanner:
             best_fit = ("Tau-SB", tau_row.model_at_z(z))
             ade_row = self.results["model_comparison"]["ade"]
             axes[0, 0].plot(z, ade_row.model_at_z(z), "b:", label="aDE best-fit", lw=1.5)
+            if "w0wa" in self.results["model_comparison"]:
+                w0wa_row = self.results["model_comparison"]["w0wa"]
+                axes[0, 0].plot(
+                    z, w0wa_row.model_at_z(z), "m-.", label="w0waCDM best-fit", lw=1.5
+                )
         elif "fit" in self.results:
             best_fit = ("Tau-SB", self.results["fit"]["model_func"](z))
 
@@ -2304,9 +2545,10 @@ class TauSBScanner:
         if "model_comparison" in self.results:
             names = [r["name"] for r in self.results["model_comparison"]["ranking"]]
             aics = [r["aic"] for r in self.results["model_comparison"]["ranking"]]
-            axes[1, 1].barh(names, aics, color=["#4c72b0", "#55a868", "#c44e52"])
+            colors = ["#4c72b0", "#55a868", "#9467bd", "#c44e52"][: len(names)]
+            axes[1, 1].barh(names, aics, color=colors)
             axes[1, 1].set_xlabel("AIC (lower is better)")
-            axes[1, 1].set_title("ΛCDM vs aDE vs Tau-SB")
+            axes[1, 1].set_title("ΛCDM vs aDE vs w0waCDM vs Tau-SB")
         elif "dipole" in self.results:
             dip = self.results["dipole"]
             method = dip.get("method", "healpy_l1")
@@ -2323,7 +2565,12 @@ class TauSBScanner:
             axes[1, 1].set_title("Healpy Dipole Fit")
 
         plt.tight_layout()
-        out = ARTIFACTS_DIR / f"{save_prefix}_summary.png"
+        out = artifact_path(
+            TestSlug.TAU_SB_DESI,
+            compose_dataset_slug(save_prefix),
+            "summary_plot",
+            "png",
+        )
         fig.savefig(out, dpi=150, bbox_inches="tight")
         plt.close(fig)
         return out
@@ -2338,6 +2585,7 @@ def _load_scan_data(
     gamma: float = 10.0,
     include_legacy_bao: bool = False,
     combine_tracers: bool = False,
+    high_power_stack: bool = False,
 ) -> dict[str, Any]:
     """Load live DESI DR2 Gaussian BAO tables (optional legacy / combined stacks)."""
     mode: str | None = data_mode
@@ -2359,6 +2607,7 @@ def _load_scan_data(
             local_path=cobaya_path,
             tracer=TRACER if tracer in {EXTENDED_BAO_TRACER, COMBINED_DR2_TRACER} else tracer,
             gamma=gamma,
+            high_power_stack=high_power_stack,
         )
 
     if mode is not None:
@@ -2463,6 +2712,8 @@ def _print_run_manifest(
     print(f"  source file: {data.get('source', 'n/a')}")
     mode_label = data.get("data_mode") or quantity_filter or "all"
     print(f"  tracer: {tracer} | data_mode: {mode_label} | n_data: {data.get('n_data', 0)}")
+    if data.get("high_power_stack"):
+        print(f"  stack: high-power (dedupe_z_tol={data.get('dedupe_z_tol', 0)})")
     print(f"  pipelines: {pipelines_enabled or 'periodicity_scan'}")
     print(f"  auto_calibrate_gamma: {auto_calibrate_gamma} | full_covariance: {use_covariance}")
     if run_mcmc:
@@ -2630,6 +2881,12 @@ def run_desi_scan(
     n_freq: int | None = None,
     n_injection_trials: int | None = None,
     max_sne: int | None = None,
+    high_power_stack: bool = False,
+    augment_covariance: bool = False,
+    run_nested_sampling: bool = False,
+    nested_nlive: int | None = None,
+    nested_max_samples: int | None = None,
+    use_jax_geometric: bool = True,
 ) -> DesiScanResult:
     scanner = TauSBScanner(
         gamma=gamma,
@@ -2644,6 +2901,7 @@ def run_desi_scan(
         quantity_filter=quantity_filter,
         include_legacy_bao=include_legacy_bao,
         combine_tracers=combine_tracers,
+        high_power_stack=high_power_stack,
     )
     data, quantity_filter, power_notes = ensure_adequate_scan_data(
         data,
@@ -2674,6 +2932,44 @@ def run_desi_scan(
     obs = data["observable"]
     err = data["err"]
     cov = data.get("cov") if use_covariance else None
+
+    if augment_covariance and cov is not None:
+        from menus.astronomical.desi.analysis import apply_augmented_covariance
+
+        cov, aug_meta = apply_augmented_covariance(
+            cov,
+            z,
+            name=str(data.get("label", "bao")),
+        )
+        data["cov"] = cov
+        data["cov_augmented"] = aug_meta
+        err = np.sqrt(np.clip(np.diag(cov), 0.0, None))
+        data["err"] = err
+        print(
+            f"  [Covariance] Augmented with domain drift (Δγ={aug_meta['delta_gamma']:.2f}) "
+            f"+ friction P(k)∝k^{aug_meta['friction_exponent']}"
+        )
+
+    geometric_likelihood: dict[str, Any] | None = None
+    if cov is not None and len(obs) >= 3:
+        from menus.astronomical.desi.theory_likelihood import geometric_likelihood_summary
+
+        qtypes = data.get("quantity_types") or []
+        quantity = qtypes[0] if len(qtypes) == 1 else (data.get("quantity_filter") or "DH_over_rs")
+        try:
+            geometric_likelihood = geometric_likelihood_summary(
+                obs,
+                z,
+                cov,
+                quantity=str(quantity),
+            )
+            print(
+                f"  [Geometry μ] fixed-prior logL={geometric_likelihood['log_likelihood']:.2f}, "
+                f"χ²={geometric_likelihood['chi2']:.2f} "
+                f"(reduced={geometric_likelihood['reduced_chi2']:.2f})"
+            )
+        except (ValueError, np.linalg.LinAlgError) as exc:
+            print(f"  [Geometry μ] skipped: {exc}")
 
     if auto_calibrate_gamma and cov is not None:
         from menus.astronomical.desi.analysis import run_auto_diagnostics
@@ -2751,7 +3047,7 @@ def run_desi_scan(
             y_model,
             cov,
             save_plots=plot,
-            plot_dir=str(ARTIFACTS_DIR / "residual_diagnostics"),
+            plot_dir=str(ARTIFACTS_DIR / TestSlug.TAU_SB_DESI / TestSlug.RESIDUAL_DIAGNOSTICS),
             verbose=True,
             show_plots=False,
             best_gamma=gamma_for_rd,
@@ -2817,8 +3113,16 @@ def run_desi_scan(
             f"use {MCMC_STEPS_DEFAULT}+ for publication-grade posteriors."
         )
 
-    mcmc = changepoints = injection = joint = None
-    if any([run_mcmc, run_changepoints, run_injection_recovery, run_joint_fit]):
+    mcmc = changepoints = injection = joint = nested_evidence = None
+    if any(
+        [
+            run_mcmc,
+            run_changepoints,
+            run_injection_recovery,
+            run_joint_fit,
+            run_nested_sampling,
+        ]
+    ):
         from menus.astronomical.desi.production import run_production_pipeline
 
         if run_fit and fit is not None:
@@ -2831,15 +3135,20 @@ def run_desi_scan(
             run_changepoints=run_changepoints,
             run_injection=run_injection_recovery,
             run_joint=run_joint_fit,
+            run_nested_sampling=run_nested_sampling,
             mcmc_steps=mcmc_steps,
             use_covariance=use_covariance,
             n_injection_trials=n_injection_trials,
             max_sne=max_sne,
+            nested_nlive=nested_nlive,
+            nested_max_samples=nested_max_samples,
+            use_jax_geometric=use_jax_geometric,
         )
         mcmc = prod.get("mcmc")
         changepoints = prod.get("changepoints")
         injection = prod.get("injection_recovery")
         joint = prod.get("joint_fit")
+        nested_evidence = prod.get("nested_evidence")
 
     plot_path = str(scanner.plot_all(data, save_prefix=output_prefix)) if plot else None
     tav_harmonics = per.get("tav_harmonics")
@@ -2885,6 +3194,7 @@ def run_desi_scan(
         changepoints=changepoints,
         injection_recovery=injection,
         joint_fit=joint,
+        nested_evidence=nested_evidence,
         tav_harmonics=tav_harmonics,
         power_assessment=power_assessment,
         gamma_diagnostics=data.get("gamma_diagnostics") or per.get("gamma_diagnostics"),
@@ -2904,7 +3214,12 @@ def run_desi_scan(
     )
 
     _ensure_artifacts()
-    report_path = ARTIFACTS_DIR / f"{output_prefix}_report_{_utc_stamp()}.json"
+    report_path = artifact_path(
+        TestSlug.TAU_SB_DESI,
+        compose_dataset_slug(result.tracer, quantity_filter, output_prefix),
+        "report",
+        "json",
+    )
     payload: dict[str, Any] = {
         "timestamp_utc": _utc_iso(),
         "action": action_name or None,
@@ -2952,9 +3267,13 @@ def run_desi_scan(
         "data_stack": {
             "include_legacy_bao": include_legacy_bao,
             "combine_tracers": combine_tracers,
+            "high_power_stack": high_power_stack or bool(data.get("high_power_stack")),
+            "dedupe_z_tol": data.get("dedupe_z_tol"),
             "legacy_included": data.get("legacy_included"),
             "surveys": data.get("surveys"),
+            "cov_augmented": data.get("cov_augmented"),
         },
+        "geometric_likelihood": geometric_likelihood,
         "non_circular_tau_sb_fit": per.get("non_circular_tau_sb_fit"),
         "fit": (
             {
@@ -2999,6 +3318,7 @@ def run_desi_scan(
         "changepoints": changepoints,
         "injection_recovery": injection,
         "joint_fit": joint,
+        "nested_evidence": nested_evidence,
         "plot_path": plot_path,
     }
     from menus.astronomical.desi.json_util import write_json

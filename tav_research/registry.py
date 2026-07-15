@@ -75,12 +75,44 @@ else:
     CASIMIR_IMPORT_ERROR = None
 
 try:
+    import menus.particle.rgc.extension as rgc_mock_extension
+except ImportError as _rgc_import_error:
+    rgc_mock_extension = None
+    RGC_IMPORT_ERROR = _rgc_import_error
+else:
+    RGC_IMPORT_ERROR = None
+
+try:
     import menus.tsb_research.extension as tsb_research_extension
 except ImportError as _tsb_research_import_error:
     tsb_research_extension = None
     TSB_RESEARCH_IMPORT_ERROR = _tsb_research_import_error
 else:
     TSB_RESEARCH_IMPORT_ERROR = None
+
+try:
+    import menus.gravitic.ligo.extension as ligo_gwosc_extension
+except ImportError as _ligo_import_error:
+    ligo_gwosc_extension = None
+    LIGO_IMPORT_ERROR = _ligo_import_error
+else:
+    LIGO_IMPORT_ERROR = None
+
+try:
+    import menus.gravitic.lisa.extension as lisa_pre_runs_extension
+except ImportError as _lisa_import_error:
+    lisa_pre_runs_extension = None
+    LISA_IMPORT_ERROR = _lisa_import_error
+else:
+    LISA_IMPORT_ERROR = None
+
+try:
+    import menus.particle.cern.extension as cern_opendata_extension
+except ImportError as _cern_import_error:
+    cern_opendata_extension = None
+    CERN_IMPORT_ERROR = _cern_import_error
+else:
+    CERN_IMPORT_ERROR = None
 
 # =============================================================================
 # BLOCK: MODULE_EXTENSIONS map (tag → extension module)
@@ -109,6 +141,14 @@ if tsb_casimir_extension is not None:
     MODULE_EXTENSIONS[tsb_casimir_extension.MODULE_TAG] = tsb_casimir_extension
 if tsb_research_extension is not None:
     MODULE_EXTENSIONS[tsb_research_extension.MODULE_TAG] = tsb_research_extension
+if rgc_mock_extension is not None:
+    MODULE_EXTENSIONS[rgc_mock_extension.MODULE_TAG] = rgc_mock_extension
+if ligo_gwosc_extension is not None:
+    MODULE_EXTENSIONS[ligo_gwosc_extension.MODULE_TAG] = ligo_gwosc_extension
+if lisa_pre_runs_extension is not None:
+    MODULE_EXTENSIONS[lisa_pre_runs_extension.MODULE_TAG] = lisa_pre_runs_extension
+if cern_opendata_extension is not None:
+    MODULE_EXTENSIONS[cern_opendata_extension.MODULE_TAG] = cern_opendata_extension
 
 
 # =============================================================================

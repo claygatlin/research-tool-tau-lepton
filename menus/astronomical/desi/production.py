@@ -27,15 +27,22 @@ from tav_shared.batch_ledger import (
     format_batch_banner,
     select_batch_items,
 )
+from tav_shared.artifact_paths import TestSlug, artifact_path, artifact_timestamp, compose_dataset_slug
 from menus.astronomical.desi.scanner import (
-    ARTIFACTS_DIR,
     CHANGPOINTS_MIN_N,
     DATASETS_DIR,
+    DATA_MODE_DH_ONLY,
+    DATA_MODE_DM_ONLY,
+    DATA_MODE_JOINT,
     LATE_UNIVERSE_DELTA_N,
     MCMC_STEPS_DEFAULT,
     MCMC_WALKERS_DEFAULT,
     N_HIER_BINDING,
+    RD_OBSERVED_ERR_MPC,
+    RD_OBSERVED_MPC,
+    DesiScanResult,
     TauSBScanner,
+    data_mode_to_quantity_filter,
     mcmc_burn_in_for_steps,
     gaussian_chi2,
     list_desi_tracers,
@@ -51,14 +58,11 @@ PANTHEON_DAT_URL = (
     "https://raw.githubusercontent.com/PantheonPlusSH0ES/DataRelease/main/"
     "Pantheon+_Data/4_DISTANCES_AND_COVAR/Pantheon+SH0ES.dat"
 )
-PLANCK_RD_MPC: float = 147.09
-PLANCK_RD_ERR_MPC: float = 0.26
+
+PLANCK_RD_MPC: float = RD_OBSERVED_MPC
+PLANCK_RD_ERR_MPC: float = RD_OBSERVED_ERR_MPC
 # Early-universe friction floor imprint on sound horizon (fractional shift scale)
 FRICTION_FLOOR_SHIFT_SCALE: float = 3.131e-3  # tied to 313.1 MeV anchor (×1e-5)
-
-
-def _utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 def _percentiles(samples: np.ndarray, levels: tuple[float, ...] = (16, 50, 84)) -> dict[str, float]:
@@ -165,8 +169,7 @@ def run_mcmc_tau_sb(
         "chain_path": None,
     }
 
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    chain_path = ARTIFACTS_DIR / f"tau_sb_mcmc_chain_{_utc_stamp()}.npz"
+    chain_path = artifact_path(TestSlug.MCMC, "tau_sb_desi", "mcmc_chain", "npz")
     np.savez_compressed(chain_path, chain=chain, labels=np.array(labels))
     result["chain_path"] = str(chain_path)
     scanner.results["mcmc"] = result
@@ -701,10 +704,9 @@ def run_batch_tracer_scan(
             "summaries": summaries,
             "done_count": status["done_count"],
             "pending_count": status["pending_count"],
-            "timestamp": _utc_stamp(),
+            "timestamp": artifact_timestamp(),
         }
-        ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-        out = ARTIFACTS_DIR / f"{output_prefix}_summary_{_utc_stamp()}.json"
+        out = artifact_path(TestSlug.TAU_SB_DESI, compose_dataset_slug(output_prefix), "batch_summary", "json")
         from menus.astronomical.desi.json_util import write_json
 
         write_json(out, batch, indent=2, sort_keys=True)
@@ -766,10 +768,273 @@ def run_batch_tracer_scan(
         "summaries": summaries,
         "done_count": status["done_count"] + len(completed),
         "pending_count": max(0, status["pending_count"] - len(completed)),
-        "timestamp": _utc_stamp(),
+        "timestamp": artifact_timestamp(),
     }
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = ARTIFACTS_DIR / f"{output_prefix}_summary_{_utc_stamp()}.json"
+    out = artifact_path(TestSlug.TAU_SB_DESI, compose_dataset_slug(output_prefix), "batch_summary", "json")
+    from menus.astronomical.desi.json_util import write_json
+
+    write_json(out, batch, indent=2, sort_keys=True)
+    batch["summary_path"] = str(out)
+    return batch
+
+
+# ---------------------------------------------------------------------------
+# 7. Joint_DH_DM split scan (DH then DM, collated)
+# ---------------------------------------------------------------------------
+
+
+def _channel_result_digest(result: DesiScanResult) -> dict[str, Any]:
+    """Compact per-channel summary for collated Joint_DH_DM reports."""
+    fit = result.fit or {}
+    mc = result.model_comparison or {}
+    per = result.periodicity or {}
+    th = result.tav_harmonics or {}
+    power = result.power_assessment or {}
+    return {
+        "data_label": result.data_label,
+        "tracer": result.tracer,
+        "n_data": fit.get("n_data"),
+        "gamma_used": result.gamma_used,
+        "fit": (
+            {
+                "chi2": fit.get("chi2"),
+                "reduced_chi2": fit.get("reduced_chi2"),
+                "dof": fit.get("dof"),
+                "A_osc_frac": fit.get("A_osc_frac", fit.get("A_osc")),
+                "aic": fit.get("aic"),
+                "bic": fit.get("bic"),
+            }
+            if fit
+            else None
+        ),
+        "model_comparison": (
+            {
+                "best_model": mc.get("best_model"),
+                "ranking": mc.get("ranking"),
+                "bayes_factors_vs_tau_sb": mc.get("bayes_factors_vs_tau_sb"),
+            }
+            if mc
+            else None
+        ),
+        "periodicity": (
+            {
+                "power_at_expected": per.get("power_at_expected"),
+                "max_power": per.get("max_power"),
+                "pval_bootstrap": per.get("pval_bootstrap", per.get("pval_approx")),
+                "lomb_detected": bool(th.get("lomb_detected", False)),
+                "tav_resonance_detected": bool(th.get("tav_resonance_detected", False)),
+            }
+            if per
+            else None
+        ),
+        "power_assessment": (
+            {
+                "overall_severity": power.get("overall_severity"),
+                "n_data": power.get("n_data"),
+                "cycles_possible": power.get("cycles_possible"),
+            }
+            if power
+            else None
+        ),
+        "tsb_sound_horizon": result.tsb_sound_horizon,
+        "plot_path": result.plot_path,
+        "report_path": result.report_path,
+        "recommended_next_steps": result.recommended_next_steps,
+    }
+
+
+def _joint_channel_comparison(channels: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Cross-channel comparison block for Joint_DH_DM collation."""
+    dh = channels.get(DATA_MODE_DH_ONLY, {})
+    dm = channels.get(DATA_MODE_DM_ONLY, {})
+    dh_fit = dh.get("fit") or {}
+    dm_fit = dm.get("fit") or {}
+    dh_mc = dh.get("model_comparison") or {}
+    dm_mc = dm.get("model_comparison") or {}
+    dh_per = dh.get("periodicity") or {}
+    dm_per = dm.get("periodicity") or {}
+    return {
+        "dh_n_data": dh.get("n_data"),
+        "dm_n_data": dm.get("n_data"),
+        "dh_best_model": dh_mc.get("best_model"),
+        "dm_best_model": dm_mc.get("best_model"),
+        "dh_A_osc_frac": dh_fit.get("A_osc_frac"),
+        "dm_A_osc_frac": dm_fit.get("A_osc_frac"),
+        "dh_reduced_chi2": dh_fit.get("reduced_chi2"),
+        "dm_reduced_chi2": dm_fit.get("reduced_chi2"),
+        "dh_lomb_detected": dh_per.get("lomb_detected"),
+        "dm_lomb_detected": dm_per.get("lomb_detected"),
+        "dh_tav_detected": dh_per.get("tav_resonance_detected"),
+        "dm_tav_detected": dm_per.get("tav_resonance_detected"),
+        "models_agree": dh_mc.get("best_model") == dm_mc.get("best_model"),
+        "note": (
+            "Joint_DH_DM runs separate single-channel fits; do not merge DH+DM "
+            "into one oscillation template."
+        ),
+    }
+
+
+def format_joint_dh_dm_summary_lines(batch: dict[str, Any]) -> list[str]:
+    """Human-readable collation for terminal / run logs."""
+    lines = [
+        "═══════════════════════════════════════════════════════════════",
+        "Joint_DH_DM split scan — DH_only then DM_only (collated)",
+        f"Action: {batch.get('action', 'n/a')}",
+        f"Tracer: {batch.get('tracer', 'n/a')}",
+        "═══════════════════════════════════════════════════════════════",
+    ]
+    channels = batch.get("channels") or {}
+    for mode in (DATA_MODE_DH_ONLY, DATA_MODE_DM_ONLY):
+        ch = channels.get(mode) or {}
+        if ch.get("error"):
+            lines.append(f"\n[{mode}] ERROR: {ch['error']}")
+            continue
+        fit = ch.get("fit") or {}
+        mc = ch.get("model_comparison") or {}
+        per = ch.get("periodicity") or {}
+        lines.append(f"\n[{mode}] {ch.get('data_label', mode)}")
+        lines.append(f"  n_data={ch.get('n_data', 'n/a')} | γ={ch.get('gamma_used', float('nan')):.4f}")
+        if fit:
+            lines.append(
+                f"  Tau-SB fit: χ²={fit.get('chi2', float('nan')):.2f} "
+                f"(reduced={fit.get('reduced_chi2', float('nan')):.2f}), "
+                f"A_osc_frac≈{fit.get('A_osc_frac', float('nan')):.4f}"
+            )
+        if mc.get("best_model"):
+            lines.append(f"  Best model: {mc['best_model']}")
+        if per:
+            lines.append(
+                f"  1/7 track: Lomb={per.get('lomb_detected')} "
+                f"tav-resonance={per.get('tav_resonance_detected')} "
+                f"(p≈{per.get('pval_bootstrap', float('nan')):.4g})"
+            )
+        if ch.get("report_path"):
+            lines.append(f"  Report: {ch['report_path']}")
+    cmp = batch.get("comparison") or {}
+    lines.append("\n[Comparison]")
+    lines.append(
+        f"  Models agree: {cmp.get('models_agree')} "
+        f"(DH={cmp.get('dh_best_model')}, DM={cmp.get('dm_best_model')})"
+    )
+    lines.append(
+        f"  A_osc_frac: DH={cmp.get('dh_A_osc_frac')} | DM={cmp.get('dm_A_osc_frac')}"
+    )
+    if batch.get("summary_path"):
+        lines.append(f"\nCollated summary: {batch['summary_path']}")
+    return lines
+
+
+def run_joint_dh_dm_scan(
+    *,
+    cobaya_path: str | Path | None = None,
+    tracer: str = "ALL_GCcomb",
+    gamma: float = 10.0,
+    n_hier: float = N_HIER_BINDING,
+    use_covariance: bool = True,
+    run_fit: bool = True,
+    compare_models: bool = False,
+    run_dipole: bool = False,
+    run_mcmc: bool = False,
+    run_changepoints: bool = False,
+    run_binding_kit: bool = False,
+    run_injection_recovery: bool = False,
+    run_joint_fit: bool = False,
+    mcmc_steps: int = MCMC_STEPS_DEFAULT,
+    plot: bool = True,
+    output_prefix: str = "tau_sb_desi",
+    action_name: str = "",
+    pipelines_enabled: str = "",
+    include_legacy_bao: bool = False,
+    combine_tracers: bool = False,
+    fit_phase: bool = True,
+    fit_hier: bool | None = None,
+    n_freq: int | None = None,
+    n_injection_trials: int | None = None,
+    max_sne: int | None = None,
+    high_power_stack: bool = False,
+    augment_covariance: bool = False,
+    run_nested_sampling: bool = False,
+    nested_nlive: int | None = None,
+    nested_max_samples: int | None = None,
+    use_jax_geometric: bool = True,
+) -> dict[str, Any]:
+    """
+    Run Joint_DH_DM as sequential DH_only and DM_only scans, then collate.
+
+    Mixed DH+DM vectors are never fitted as a single channel; each observable
+    type gets its own Tau-SB pipeline pass.
+    """
+    channel_modes = (DATA_MODE_DH_ONLY, DATA_MODE_DM_ONLY)
+    channels: dict[str, Any] = {}
+    results: dict[str, DesiScanResult] = {}
+
+    print(
+        f"\n[Joint_DH_DM] Split scan: {DATA_MODE_DH_ONLY} → {DATA_MODE_DM_ONLY} "
+        f"(action={action_name or 'desi_scan'})"
+    )
+
+    for mode in channel_modes:
+        quantity_filter = data_mode_to_quantity_filter(mode)
+        channel_prefix = f"{output_prefix}_{mode.lower()}"
+        print(f"\n[Joint_DH_DM] Starting channel: {mode} (quantity={quantity_filter})")
+        try:
+            result = run_desi_scan(
+                cobaya_path=cobaya_path,
+                tracer=tracer,
+                quantity_filter=quantity_filter,
+                gamma=gamma,
+                auto_calibrate_gamma=True,
+                n_hier=n_hier,
+                use_covariance=use_covariance,
+                run_fit=run_fit,
+                compare_models=compare_models,
+                run_dipole=run_dipole,
+                run_mcmc=run_mcmc,
+                run_changepoints=run_changepoints,
+                run_binding_kit=run_binding_kit,
+                run_injection_recovery=run_injection_recovery,
+                run_joint_fit=run_joint_fit,
+                mcmc_steps=mcmc_steps,
+                plot=plot,
+                output_prefix=channel_prefix,
+                action_name=f"{action_name} [{mode}]" if action_name else mode,
+                pipelines_enabled=pipelines_enabled,
+                include_legacy_bao=include_legacy_bao,
+                combine_tracers=combine_tracers,
+                fit_phase=fit_phase,
+                fit_hier=fit_hier,
+                n_freq=n_freq,
+                n_injection_trials=n_injection_trials,
+                max_sne=max_sne,
+                high_power_stack=high_power_stack,
+                augment_covariance=augment_covariance,
+                run_nested_sampling=run_nested_sampling,
+                nested_nlive=nested_nlive,
+                nested_max_samples=nested_max_samples,
+                use_jax_geometric=use_jax_geometric,
+            )
+            results[mode] = result
+            channels[mode] = _channel_result_digest(result)
+            print(f"[Joint_DH_DM] Finished {mode}: n={channels[mode].get('n_data')} "
+                  f"report={result.report_path}")
+        except Exception as exc:
+            channels[mode] = {"error": str(exc), "quantity_filter": quantity_filter}
+            print(f"[Joint_DH_DM] Channel {mode} failed: {exc}")
+
+    digests = {k: v for k, v in channels.items() if not v.get("error")}
+    comparison = _joint_channel_comparison(digests) if len(digests) == 2 else {}
+
+    batch: dict[str, Any] = {
+        "scan_mode": DATA_MODE_JOINT,
+        "split_channels": list(channel_modes),
+        "action": action_name or None,
+        "tracer": tracer,
+        "include_legacy_bao": include_legacy_bao,
+        "channels": channels,
+        "comparison": comparison,
+        "timestamp": artifact_timestamp(),
+    }
+    out = artifact_path(TestSlug.TAU_SB_DESI, compose_dataset_slug(output_prefix, "joint_dh_dm"), "summary", "json")
     from menus.astronomical.desi.json_util import write_json
 
     write_json(out, batch, indent=2, sort_keys=True)
@@ -786,16 +1051,28 @@ def run_production_pipeline(
     run_changepoints: bool = False,
     run_injection: bool = False,
     run_joint: bool = False,
+    run_nested_sampling: bool = False,
     mcmc_steps: int = MCMC_STEPS_DEFAULT,
     use_covariance: bool = True,
     n_injection_trials: int | None = None,
     max_sne: int | None = None,
+    nested_nlive: int | None = None,
+    nested_max_samples: int | None = None,
+    use_jax_geometric: bool = True,
 ) -> dict[str, Any]:
     """Execute selected production modules in order on one dataset."""
     z = data["z"]
     obs = data["observable"]
     err = data["err"]
     cov = data.get("cov") if use_covariance else None
+    cov_augmented = bool(data.get("cov_augmented"))
+    q_raw = data.get("quantity")
+    if isinstance(q_raw, (list, tuple)) and q_raw:
+        quantity = str(q_raw[0])
+    elif q_raw:
+        quantity = str(q_raw)
+    else:
+        quantity = "DH_over_rs"
     outputs: dict[str, Any] = {}
 
     if run_mcmc:
@@ -841,6 +1118,26 @@ def run_production_pipeline(
             data,
             pantheon_data=pantheon,
             use_covariance=use_covariance,
+        )
+    if run_nested_sampling:
+        from menus.astronomical.desi.nested_sampling import (
+            NESTED_MAX_SAMPLES_DEFAULT,
+            NESTED_NLIVE_DEFAULT,
+            run_nested_evidence_comparison,
+        )
+
+        outputs["nested_evidence"] = run_nested_evidence_comparison(
+            scanner,
+            z,
+            obs,
+            err,
+            cov,
+            nlive=int(nested_nlive or NESTED_NLIVE_DEFAULT),
+            max_samples=int(nested_max_samples or NESTED_MAX_SAMPLES_DEFAULT),
+            output_prefix="tau_sb_desi_nested",
+            use_jax_geometric=use_jax_geometric,
+            cov_already_augmented=cov_augmented,
+            quantity=quantity,
         )
 
     return outputs

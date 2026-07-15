@@ -10,8 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, Optional
 
-_PROJECT_ROOT = Path(__file__).resolve().parent
-ARTIFACTS_DIR = _PROJECT_ROOT / "artifacts"
+from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+from tav_shared.tav_project_paths import ARTIFACTS_ROOT
+
+ARTIFACTS_DIR = ARTIFACTS_ROOT
 
 
 class _TeeStream:
@@ -46,17 +48,18 @@ def _slugify(text: str) -> str:
 def build_test_output_path(
     test_name: str,
     *,
-    output_dir: Path | str = ARTIFACTS_DIR,
+    output_dir: Path | str | None = None,
     when: datetime | None = None,
+    dataset: str = "run_log",
 ) -> Path:
     """
-    Build ``{test_name}.out.{date}.out`` for a single test/run.
+    Build a canonical run log path under ``artifacts/run_logs/``.
 
-    ``test_name`` is slugified; ``date`` is ``YYYYMMDD_HHMMSS``.
+    Filename: ``{test}__{dataset}__stdout__{MM-DD-YYYY}_{HHMMSS}.out``
     """
-    stamp = (when or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    del output_dir  # legacy param — logs always use TestSlug.RUN_LOG
     slug = _slugify(test_name)
-    return Path(output_dir) / f"{slug}.out.{stamp}.out"
+    return artifact_path(TestSlug.RUN_LOG, dataset, f"{slug}_stdout", "out", when=when)
 
 
 def write_test_output(

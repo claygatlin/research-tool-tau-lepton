@@ -23,6 +23,8 @@ DESI_BATCH_DONE = DATASETS_ROOT / "desi" / "batch_done.txt"
 INTEGRATOR_PULL_DONE = DATASETS_ROOT / "fits" / "done.txt"
 FRB_PULL_DONE = DATASETS_ROOT / "frb" / "done.txt"
 HEPDATA_BATCH_DONE = DATASETS_ROOT / "hepdata" / "batch_done.txt"
+GWOSC_PULL_DONE = DATASETS_ROOT / "gwosc" / "done.txt"
+LISA_PULL_DONE = DATASETS_ROOT / "lisa" / "done.txt"
 
 _LEDGER_HEADERS: dict[Path, tuple[str, ...]] = {
     SPARC_PULL_DONE: (
@@ -52,6 +54,14 @@ _LEDGER_HEADERS: dict[Path, tuple[str, ...]] = {
     HEPDATA_BATCH_DONE: (
         "# HEPData / batch-list ledger — one dataset ID per line.",
         "# Successful fetches append here; batch mode resumes at pending IDs.",
+    ),
+    GWOSC_PULL_DONE: (
+        "# GWOSC / LIGO strain pull ledger — one target key per line.",
+        "# event:GW150914, segment:H:H1_R:start:end, or uri:osdf:///…",
+    ),
+    LISA_PULL_DONE: (
+        "# LISA / IGWN OSDF pull ledger — one target key per line.",
+        "# Manifest keys, osdf:/// URIs, or cached relative paths.",
     ),
 }
 

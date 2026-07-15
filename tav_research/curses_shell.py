@@ -8,11 +8,40 @@ Shared by every submenu.  Submenu-specific pre-form logic lives in each
 from __future__ import annotations
 
 import curses
+import subprocess
+import sys
+import time
+from pathlib import Path
+from contextlib import contextmanager
+from typing import Any
 
 ROOT_TITLE = "Primary Matrix"
 NAV_BACK = "<< Back"
 NAV_HOME = "<< Home"
 NAV_ITEMS = {NAV_BACK, NAV_HOME}
+
+
+def restore_terminal() -> None:
+    """Return the terminal to normal cooked mode after curses exits."""
+    try:
+        curses.endwin()
+    except Exception:
+        pass
+    try:
+        subprocess.run(
+            ["stty", "sane"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except Exception:
+        pass
+    try:
+        sys.stdout.write("\033[?25h")
+        sys.stdout.flush()
+    except Exception:
+        pass
 
 def append_nav(options):
     return list(options) + [NAV_BACK, NAV_HOME]
@@ -317,5 +346,231 @@ def show_entry_form(stdscr, title, subtitle, fields, instructions=None):
         values[field["key"]] = value
 
     return values
+
+
+def _format_duration(seconds: float) -> str:
+    if seconds < 0 or not (seconds < 1e12):
+        return "—"
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m {secs:02d}s"
+    if minutes:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
+def _format_count(value: int) -> str:
+    return f"{int(value):,}"
+
+
+def draw_progress_bar(
+    stdscr,
+    *,
+    fraction: float,
+    row: int,
+    col: int = 4,
+    width: int | None = None,
+    fill: str = "█",
+    empty: str = "░",
+) -> int:
+    """Draw a horizontal bar; returns the row after the bar."""
+    max_y, max_x = _term_size(stdscr)
+    if row >= max_y - 1:
+        return row
+    bar_width = width
+    if bar_width is None:
+        bar_width = max(10, min(48, max_x - col - 12))
+    frac = max(0.0, min(1.0, float(fraction)))
+    filled = int(round(bar_width * frac))
+    bar = fill * filled + empty * (bar_width - filled)
+    pct = f"{frac * 100:5.1f}%"
+    _safe_addstr(stdscr, row, col, f"[{bar}] {pct}")
+    return row + 1
+
+
+def draw_chunked_scan_screen(
+    stdscr,
+    *,
+    title: str,
+    path: str,
+    events_done: int,
+    total_events: int,
+    muons_binned: int,
+    chunk_size: int,
+    elapsed_sec: float,
+    eta_sec: float,
+    status: str = "Scanning",
+) -> None:
+    """Full-screen progress layout for uproot chunked CMS scans."""
+    max_y, max_x = _term_size(stdscr)
+    stdscr.clear()
+    row = 2
+    _safe_addstr(stdscr, row, 2, title, curses.A_BOLD)
+    row += 2
+
+    path_label = Path(path).name if path else "—"
+    _safe_addstr(stdscr, row, 4, f"File: {path_label[: max(1, max_x - 12)]}", curses.A_DIM)
+    row += 2
+
+    total = max(int(total_events), 1)
+    done = max(0, int(events_done))
+    frac = min(1.0, done / total)
+    _safe_addstr(
+        stdscr,
+        row,
+        4,
+        f"Events: {_format_count(done)} / {_format_count(total)}",
+        curses.A_BOLD,
+    )
+    row += 1
+    row = draw_progress_bar(stdscr, fraction=frac, row=row, col=4, width=max(10, max_x - 20))
+    row += 1
+
+    lines = [
+        f"Muons binned: {_format_count(muons_binned)}",
+        f"Chunk size:   {_format_count(chunk_size)}",
+        f"Elapsed:      {_format_duration(elapsed_sec)}",
+        f"ETA:          {_format_duration(eta_sec)}",
+        f"Status:       {status}",
+    ]
+    for line in lines:
+        if row >= max_y - 2:
+            break
+        _safe_addstr(stdscr, row, 4, line[: max(1, max_x - 6)])
+        row += 1
+
+    if row < max_y - 1:
+        _safe_addstr(stdscr, max_y - 2, 2, "Ctrl+C to cancel", curses.A_DIM)
+    stdscr.refresh()
+
+
+class ChunkedScanProgress:
+    """Live progress for long chunked uproot scans — ncurses on TTY, else stdout."""
+
+    def __init__(
+        self,
+        *,
+        title: str = "CMS NanoAOD chunked scan",
+        use_curses: bool | None = None,
+    ) -> None:
+        self.title = title
+        self.use_curses = use_curses if use_curses is not None else sys.stdout.isatty()
+        self._stdscr: Any = None
+        self._curses_active = False
+        self._start_time = 0.0
+        self._total = 0
+        self._path = ""
+        self._chunk_size = 0
+        self._last_print = 0
+
+    @property
+    def is_interactive(self) -> bool:
+        """True when the UI can redraw in place (ncurses or TTY carriage-return)."""
+        return self._curses_active or sys.stdout.isatty()
+
+    def __enter__(self) -> ChunkedScanProgress:
+        self._start_time = time.monotonic()
+        if self.use_curses:
+            try:
+                self._stdscr = curses.initscr()
+                curses.curs_set(0)
+                curses.noecho()
+                curses.cbreak()
+                if curses.has_colors():
+                    curses.start_color()
+                    curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+                    curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
+                self._curses_active = True
+            except Exception:
+                self._stdscr = None
+                self._curses_active = False
+                self.use_curses = False
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._curses_active:
+            try:
+                curses.endwin()
+            except Exception:
+                pass
+            restore_terminal()
+        self._curses_active = False
+        self._stdscr = None
+        if not self.use_curses and self._last_print:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    def begin(self, *, path: str, total_events: int, chunk_size: int) -> None:
+        self._path = str(path)
+        self._total = int(total_events)
+        self._chunk_size = int(chunk_size)
+        self.update(0, 0, status="Opening ROOT file…")
+
+    def update(
+        self,
+        events_done: int,
+        muons_binned: int,
+        *,
+        status: str = "Scanning",
+    ) -> None:
+        elapsed = time.monotonic() - self._start_time
+        total = self._total or 1
+        done = max(0, int(events_done))
+        rate = done / elapsed if elapsed > 0.05 and done > 0 else 0.0
+        eta = (total - done) / rate if rate > 0 else 0.0
+
+        if self._curses_active and self._stdscr is not None:
+            draw_chunked_scan_screen(
+                self._stdscr,
+                title=self.title,
+                path=self._path,
+                events_done=done,
+                total_events=total,
+                muons_binned=int(muons_binned),
+                chunk_size=self._chunk_size,
+                elapsed_sec=elapsed,
+                eta_sec=eta,
+                status=status,
+            )
+            return
+
+        if not sys.stdout.isatty():
+            return
+
+        frac = min(1.0, done / total) if total > 0 else 0.0
+        line = (
+            f"[CERN CMS] {frac * 100:5.1f}%  "
+            f"{_format_count(done)} / {_format_count(total)} events  "
+            f"({_format_count(muons_binned)} muons)  "
+            f"ETA {_format_duration(eta)}"
+        )
+        sys.stdout.write("\r" + line[:120])
+        sys.stdout.flush()
+        self._last_print = 1
+
+    def finish(self, events_done: int, muons_binned: int) -> None:
+        self.update(events_done, muons_binned, status="Complete")
+        if self._curses_active and self._stdscr is not None:
+            time.sleep(0.35)
+
+
+@contextmanager
+def optional_chunked_scan_progress(
+    progress: ChunkedScanProgress | None,
+    *,
+    title: str = "CMS NanoAOD chunked scan",
+    use_curses_progress: bool = True,
+):
+    """Use an existing progress object or create one for the scan duration."""
+    if progress is not None:
+        yield progress
+        return
+    if not use_curses_progress:
+        yield None
+        return
+    with ChunkedScanProgress(title=title) as owned:
+        yield owned
 
 

@@ -33,6 +33,12 @@ from tav_research.dataset_manager import (
     DATASET_MANAGER_TAG,
     DATASET_RUN_ACTION,
 )
+from tav_research.gateway_launcher import (
+    GATEWAY_GUI_MENU_LABEL,
+    gateway_log_path,
+    is_gateway_running,
+    spawn_gateway_gui,
+)
 from tav_research.menu_tree import build_menu_tree
 from tav_research.n_selector import seed_field_defaults_from_params, strip_auto_filled_fields
 from tav_research.registry import (
@@ -100,6 +106,43 @@ def main_curses(stdscr):
                 continue
             if selection == NAV_BACK:
                 go_back()
+                continue
+            if selection == GATEWAY_GUI_MENU_LABEL:
+                already_running = is_gateway_running()
+                pid, log_path, err = spawn_gateway_gui()
+                stdscr.clear()
+                max_y, max_x = stdscr.getmaxyx()
+                if err:
+                    lines = [
+                        "TAU-SB Gateway (GUI) failed to start.",
+                        str(err),
+                        "",
+                        "Press any key to return to the menu.",
+                    ]
+                elif already_running:
+                    lines = [
+                        "TAU-SB Gateway (GUI) is already running.",
+                        f"PID: {pid}",
+                        f"Log: {log_path}",
+                        "",
+                        "Press any key to return to the menu.",
+                    ]
+                else:
+                    lines = [
+                        "TAU-SB Gateway (GUI) started in background.",
+                        f"PID: {pid}",
+                        f"Log: {gateway_log_path()}",
+                        "",
+                        "The menu stays open — close the GUI window when finished.",
+                        "",
+                        "Press any key to return to the menu.",
+                    ]
+                for row, line in enumerate(lines):
+                    if row >= max_y - 2:
+                        break
+                    _safe_addstr(stdscr, row, 2, line[: max(1, max_x - 4)])
+                stdscr.refresh()
+                stdscr.getch()
                 continue
             if selection == RESET_MENU_LABEL:
                 if confirm_reset(stdscr, menu_title):

@@ -940,6 +940,308 @@ def _desi_provider() -> DatasetProvider:
     )
 
 
+def _cern_opendata_provider() -> DatasetProvider:
+    from menus.particle.cern import extension as cern_opendata_extension
+    from menus.particle.cern.fetcher import (
+        DATASETS_DIR,
+        archive_used_datasets,
+        cache_dir_for_target,
+        list_dataset_files,
+        pull_selected_targets,
+    )
+    from menus.particle.cern.manifest import CERN_MANIFEST
+
+    def _targets() -> List[DatasetTarget]:
+        targets: List[DatasetTarget] = []
+        for key, spec in CERN_MANIFEST.items():
+            dest = cache_dir_for_target(key)
+            cached = dest.is_dir() and any(dest.rglob("*"))
+            targets.append(
+                DatasetTarget(
+                    id=f"cern:{key}",
+                    module_tag="CERN_OPENDATA",
+                    label=spec["label"],
+                    state=_state_from_path(dest if cached else None, DATASETS_DIR),
+                    path=dest if cached else None,
+                    group=str(spec.get("group", "cern")),
+                )
+            )
+        for path in list_dataset_files():
+            if path.name in {"done.txt", "record_metadata.json"}:
+                continue
+            rel = path.relative_to(DATASETS_DIR)
+            stem = str(rel).replace("/", "_").replace(".", "_")
+            targets.append(
+                DatasetTarget(
+                    id=f"cern:{stem}",
+                    module_tag="CERN_OPENDATA",
+                    label=path.name,
+                    state=TargetState.CACHED,
+                    path=path,
+                    group="cached",
+                )
+            )
+        return _stamp_processed(targets)
+
+    def fetch_targets(target_ids: List[str], options: dict) -> FetchResult:
+        result = FetchResult(module_tag="CERN_OPENDATA", fetched=[], skipped=[], failed={})
+        force = str(options.get("force_refresh", "no")).lower() in {"yes", "y", "true", "1"}
+        names = [
+            tid.split(":", 1)[-1]
+            for tid in target_ids
+            if tid.startswith("cern:") and not _should_skip_fetch(tid, force)
+        ]
+        result.skipped.extend(tid for tid in target_ids if _should_skip_fetch(tid, force))
+        if not names:
+            return result
+        summary = pull_selected_targets(names, params=options, force_refresh=force)
+        result.fetched.extend(summary.downloaded)
+        result.skipped.extend(summary.skipped_done)
+        result.skipped.extend(summary.skipped_existing)
+        result.failed.update(summary.failed)
+        return result
+
+    def archive_targets(target_ids: List[str]) -> List[Path]:
+        paths: List[Path] = []
+        for tid in target_ids:
+            if not tid.startswith("cern:"):
+                continue
+            key = tid.split(":", 1)[-1]
+            if key in CERN_MANIFEST:
+                candidate = cache_dir_for_target(key)
+                if candidate.is_dir():
+                    paths.append(candidate)
+        moved = archive_used_datasets(paths)
+        sync_archived_as_processed(
+            [tid for tid in target_ids if tid.startswith("cern:")],
+            note="cern archive",
+        )
+        return moved
+
+    def run_action(action: str, target_ids: List[str], options: dict) -> None:
+        merged = dict(options)
+        if target_ids:
+            key = target_ids[0].split(":", 1)[-1]
+            if key in CERN_MANIFEST:
+                merged.setdefault("target", key)
+        cern_opendata_extension.run_action(action, options=merged)
+        mark_processed(
+            [tid for tid in target_ids if tid.startswith("cern:")],
+            note=f"cern run: {action}",
+        )
+
+    return DatasetProvider(
+        module_tag="CERN_OPENDATA",
+        title="CERN Open Data",
+        intake_dir=DATASETS_DIR,
+        list_fetchable=_targets,
+        list_runnable=_targets,
+        fetch_targets=fetch_targets,
+        archive_targets=archive_targets,
+        run_action=run_action,
+        run_actions=list(cern_opendata_extension.MENU_ACTIONS),
+    )
+
+
+def _ligo_gwosc_provider() -> DatasetProvider:
+    from menus.gravitic.ligo import extension as ligo_gwosc_extension
+    from menus.gravitic.ligo.fetcher import (
+        DATASETS_DIR,
+        archive_used_datasets,
+        list_cached_files,
+        list_catalog_events,
+        pull_selected_targets,
+    )
+
+    def _targets() -> List[DatasetTarget]:
+        targets: List[DatasetTarget] = []
+        try:
+            events = list_catalog_events()
+        except Exception:
+            events = []
+        cached_events = {path.parent.name for path in list_cached_files() if path.parent.parent.name == "events"}
+        for event in events:
+            state = TargetState.CACHED if event in cached_events else TargetState.REMOTE
+            targets.append(
+                DatasetTarget(
+                    id=f"gwosc:{event}",
+                    module_tag="LIGO_GWOSC",
+                    label=f"{event} strain (GWOSC)",
+                    state=state,
+                    path=DATASETS_DIR / "events" / event if event in cached_events else None,
+                    group="event",
+                )
+            )
+        for path in list_cached_files():
+            rel = path.relative_to(DATASETS_DIR)
+            targets.append(
+                DatasetTarget(
+                    id=f"gwosc:{rel}",
+                    module_tag="LIGO_GWOSC",
+                    label=str(rel),
+                    state=TargetState.CACHED,
+                    path=path,
+                    group="cached",
+                )
+            )
+        return _stamp_processed(targets)
+
+    def fetch_targets(target_ids: List[str], options: dict) -> FetchResult:
+        result = FetchResult(module_tag="LIGO_GWOSC", fetched=[], skipped=[], failed={})
+        force = str(options.get("force_refresh", "no")).lower() in {"yes", "y", "true", "1"}
+        names = [
+            tid.split(":", 1)[-1]
+            for tid in target_ids
+            if tid.startswith("gwosc:") and not _should_skip_fetch(tid, force)
+        ]
+        result.skipped.extend(tid for tid in target_ids if _should_skip_fetch(tid, force))
+        if not names:
+            return result
+        summary = pull_selected_targets(names, params=options, force_refresh=force)
+        result.fetched.extend(summary.downloaded)
+        result.skipped.extend(summary.skipped_done)
+        result.skipped.extend(summary.skipped_existing)
+        result.failed.update(summary.failed)
+        return result
+
+    def archive_targets(target_ids: List[str]) -> List[Path]:
+        paths = []
+        for tid in target_ids:
+            if not tid.startswith("gwosc:"):
+                continue
+            name = tid.split(":", 1)[-1]
+            candidate = DATASETS_DIR / name
+            if candidate.is_file():
+                paths.append(candidate)
+        moved = archive_used_datasets(paths)
+        sync_archived_as_processed(
+            [tid for tid in target_ids if tid.startswith("gwosc:")],
+            note="gwosc archive",
+        )
+        return moved
+
+    def run_action(action: str, target_ids: List[str], options: dict) -> None:
+        merged = dict(options)
+        if target_ids:
+            event = target_ids[0].split(":", 1)[-1]
+            if event.startswith("events/"):
+                event = Path(event).parts[1] if len(Path(event).parts) > 1 else event
+            merged.setdefault("event", event)
+        ligo_gwosc_extension.run_action(action, options=merged)
+        mark_processed(
+            [tid for tid in target_ids if tid.startswith("gwosc:")],
+            note=f"ligo run: {action}",
+        )
+
+    return DatasetProvider(
+        module_tag="LIGO_GWOSC",
+        title="LIGO GWOSC (Strain Data)",
+        intake_dir=DATASETS_DIR,
+        list_fetchable=_targets,
+        list_runnable=_targets,
+        fetch_targets=fetch_targets,
+        archive_targets=archive_targets,
+        run_action=run_action,
+        run_actions=list(ligo_gwosc_extension.MENU_ACTIONS),
+    )
+
+
+def _lisa_provider() -> DatasetProvider:
+    from menus.gravitic.lisa import extension as lisa_pre_runs_extension
+    from menus.gravitic.lisa.fetcher import (
+        DATASETS_DIR,
+        LISA_OSDF_TARGETS,
+        archive_used_datasets,
+        list_cached_files,
+        pull_selected_targets,
+    )
+
+    def _targets() -> List[DatasetTarget]:
+        targets: List[DatasetTarget] = []
+        for key, uri in LISA_OSDF_TARGETS.items():
+            name = uri.rsplit("/", 1)[-1]
+            path = DATASETS_DIR / "osdf" / name
+            targets.append(
+                DatasetTarget(
+                    id=f"lisa:{key}",
+                    module_tag="LISA_PRE_RUNS",
+                    label=f"{key} ({uri})",
+                    state=_state_from_path(path, DATASETS_DIR),
+                    path=path if path.is_file() else None,
+                    group="osdf",
+                )
+            )
+        for path in list_cached_files():
+            rel = path.relative_to(DATASETS_DIR)
+            targets.append(
+                DatasetTarget(
+                    id=f"lisa:{rel}",
+                    module_tag="LISA_PRE_RUNS",
+                    label=str(rel),
+                    state=TargetState.CACHED,
+                    path=path,
+                    group="cached",
+                )
+            )
+        return _stamp_processed(targets)
+
+    def fetch_targets(target_ids: List[str], options: dict) -> FetchResult:
+        result = FetchResult(module_tag="LISA_PRE_RUNS", fetched=[], skipped=[], failed={})
+        force = str(options.get("force_refresh", "no")).lower() in {"yes", "y", "true", "1"}
+        names = [
+            tid.split(":", 1)[-1]
+            for tid in target_ids
+            if tid.startswith("lisa:") and not _should_skip_fetch(tid, force)
+        ]
+        result.skipped.extend(tid for tid in target_ids if _should_skip_fetch(tid, force))
+        if not names:
+            return result
+        summary = pull_selected_targets(names, force_refresh=force)
+        result.fetched.extend(summary.downloaded)
+        result.skipped.extend(summary.skipped_done)
+        result.skipped.extend(summary.skipped_existing)
+        result.failed.update(summary.failed)
+        return result
+
+    def archive_targets(target_ids: List[str]) -> List[Path]:
+        paths = []
+        for tid in target_ids:
+            if not tid.startswith("lisa:"):
+                continue
+            name = tid.split(":", 1)[-1]
+            candidate = DATASETS_DIR / name
+            if candidate.is_file():
+                paths.append(candidate)
+        moved = archive_used_datasets(paths)
+        sync_archived_as_processed(
+            [tid for tid in target_ids if tid.startswith("lisa:")],
+            note="lisa archive",
+        )
+        return moved
+
+    def run_action(action: str, target_ids: List[str], options: dict) -> None:
+        merged = dict(options)
+        if target_ids and action == "Pull OSDF Target":
+            merged.setdefault("query", target_ids[0].split(":", 1)[-1])
+        lisa_pre_runs_extension.run_action(action, options=merged)
+        mark_processed(
+            [tid for tid in target_ids if tid.startswith("lisa:")],
+            note=f"lisa run: {action}",
+        )
+
+    return DatasetProvider(
+        module_tag="LISA_PRE_RUNS",
+        title="LISA Pre-runs",
+        intake_dir=DATASETS_DIR,
+        list_fetchable=_targets,
+        list_runnable=_targets,
+        fetch_targets=fetch_targets,
+        archive_targets=archive_targets,
+        run_action=run_action,
+        run_actions=list(lisa_pre_runs_extension.MENU_ACTIONS),
+    )
+
+
 _PROVIDERS: Optional[Dict[str, DatasetProvider]] = None
 
 
@@ -954,6 +1256,9 @@ def get_providers() -> Dict[str, DatasetProvider]:
         "EMPIRICAL_TESTS": _empirical_provider(),
         "LHCB_TAV_ECHO": _lhcb_provider(),
         "TAV_DATA_INTEGRATOR": _integrator_provider(),
+        "LIGO_GWOSC": _ligo_gwosc_provider(),
+        "LISA_PRE_RUNS": _lisa_provider(),
+        "CERN_OPENDATA": _cern_opendata_provider(),
     }
     try:
         providers["TAU_SB_DESI"] = _desi_provider()

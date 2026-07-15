@@ -222,7 +222,9 @@ def plot_scan_summary(
 
     if output_path is None:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = ARTIFACTS_DIR / f"tav_bbn_scan_{stamp}.png"
+        from tav_shared.artifact_paths import TestSlug, artifact_path
+
+        output_path = artifact_path(TestSlug.PRIME_PAST, "bbn_scan", "plot", "png")
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     if show:
         plt.show()
@@ -328,7 +330,9 @@ def save_scan_report(
     ensure_artifacts_dir()
     empirical = empirical or fetch_empirical_data(verbose=False)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = ARTIFACTS_DIR / f"{prefix}_{stamp}.json"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    path = artifact_path(TestSlug.PRIME_PAST, compose_dataset_slug(prefix), "report", "json")
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "scan_results": results_list,

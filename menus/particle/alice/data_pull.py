@@ -61,6 +61,20 @@ def load_alice_o2_root(path: str, entry_stop: int = 50000) -> tuple[pd.DataFrame
 
 def fetch_and_graph(query: str, params: dict[str, Any] | None = None) -> None:
     params = params or {}
+    from menus.particle.cern.fetcher import ensure_cern_target, resolve_root_path
+    from menus.particle.cern.manifest import resolve_target_key
+
+    q = (query or "").strip()
+    key = resolve_target_key(q) if q else "alice_esd_sample"
+    if key == "alice_esd_sample" and not q.endswith(".root"):
+        if resolve_root_path(key) is None:
+            force = str(params.get("force_refresh", "no")).lower() in {"yes", "y", "true", "1"}
+            print(f"[TAV ENGINE] Auto-fetching CERN target: {key}")
+            ensure_cern_target(key, force_refresh=force, auto_fetch=True)
+        root = resolve_root_path(key)
+        if root is not None:
+            query = str(root)
+
     if query.endswith(".root"):
         try:
             entry_stop = int(params.get("root_entry_limit") or 50000)

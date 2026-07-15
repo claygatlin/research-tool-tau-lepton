@@ -81,7 +81,7 @@ def _plot_sound_horizon_curve(sh: SoundHorizon, save_path: Path) -> None:
     rds = np.array([sh.predict_rd(float(g)) for g in gammas], dtype=float)
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(gammas, rds, "b-", linewidth=2, label=r"$r_d^{\mathrm{pred}}(\gamma)$")
-    ax.axhline(147.0, color="red", linestyle="--", alpha=0.7, label="Observed 147 Mpc")
+    ax.axhline(147.09, color="red", linestyle="--", alpha=0.7, label="Observed 147.09 Mpc")
     ax.set_xlabel("γ (cylinder stretch)")
     ax.set_ylabel(r"$r_d$ (Mpc)")
     ax.set_title("SoundHorizon Φ-anchored calibration")

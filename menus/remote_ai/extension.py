@@ -128,8 +128,9 @@ def run_action(
     if action == "test_connections":
         providers = parse_provider_list(options)
         result = test_api_connections(providers=providers, verbose=True)
-        ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-        out = ARTIFACTS_DIR / f"connection_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        from tav_shared.artifact_paths import TestSlug, artifact_path
+
+        out = artifact_path(TestSlug.REMOTE_AI, "connection_test", "report", "json")
         out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         print(f"[TAV ENGINE] Connection test saved: {out}")
         return str(out)
@@ -176,10 +177,13 @@ def run_action(
         from tav_shared.llm_analysis import query_all_providers
 
         providers = parse_provider_list(options)
-        results = query_all_providers(full_prompt, providers=providers)
-        ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        out = ARTIFACTS_DIR / f"custom_prompt_{stamp}.json"
+        results = query_all_providers(
+            full_prompt, providers=providers, options=options
+        )
+        from tav_shared.artifact_paths import TestSlug, artifact_path, artifact_timestamp
+
+        stamp = artifact_timestamp()
+        out = artifact_path(TestSlug.REMOTE_AI, "custom_prompt", "report", "json")
         payload = {
             "timestamp": stamp,
             "prompt": prompt,

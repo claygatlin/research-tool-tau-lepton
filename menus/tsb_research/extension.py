@@ -30,6 +30,7 @@ REPO_ACTIONS = [
     "Evolve Cylinder State",
     "Run Residual Diagnostics",
     "Calibrate SoundHorizon",
+    "Run Falsification Suite (Methods 1,4,9)",
 ]
 MENU_ACTIONS = REPO_ACTIONS
 
@@ -41,7 +42,9 @@ def is_module_selection(repo: str | None) -> bool:
 def _save_report(name: str, payload: dict[str, Any]) -> str:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = ARTIFACTS_DIR / f"tsb_research_{name}_{stamp}.json"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    path = artifact_path(TestSlug.TSB_RESEARCH, compose_dataset_slug(name), "report", "json")
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return str(path)
 
@@ -136,6 +139,53 @@ def entry_fields(action: str) -> list[dict]:
                 "hint": "Axial reference for Φ-anchored r_d",
             },
         ]
+    if action == "Run Falsification Suite (Methods 1,4,9)":
+        return [
+            {
+                "key": "n_points",
+                "label": "Grid points",
+                "default": "4096",
+                "required": False,
+                "hint": "1D grid size (or n^(1/3) for 3D)",
+            },
+            {
+                "key": "box_size_mpc",
+                "label": "Box size [h⁻¹ Mpc]",
+                "default": "3000",
+                "required": False,
+                "hint": "Comoving volume scale",
+            },
+            {
+                "key": "noise_level",
+                "label": "Noise σ",
+                "default": "0.25",
+                "required": False,
+                "hint": "Gaussian δ noise",
+            },
+            {
+                "key": "dimension",
+                "label": "Grid dimension",
+                "default": "1",
+                "required": False,
+                "hint": "1 or 3 (fftn cube)",
+                "choices": ["1", "3"],
+            },
+            {
+                "key": "use_jax",
+                "label": "JAX FFT",
+                "default": "yes",
+                "required": False,
+                "hint": "Accelerated FFT when JAX installed",
+                "choices": ["yes", "no"],
+            },
+            {
+                "key": "output_prefix",
+                "label": "Report prefix",
+                "default": "falsification_suite",
+                "required": False,
+                "hint": "artifacts/lss_falsification_*.json",
+            },
+        ]
     return []
 
 
@@ -166,6 +216,11 @@ def entry_instructions(action: str) -> list[str]:
         "Calibrate SoundHorizon": [
             "Φ-anchored r_d calibration across γ = 7.95, 8.0, 8.8511, 12.0.",
             "Reports γ-swing reduction vs legacy compute_tsb_rd.",
+        ],
+        "Run Falsification Suite (Methods 1,4,9)": [
+            "Unified LSS falsification: S(n) nodes, P(k) comb, gridded mock recovery.",
+            "Returns global PASS / POTENTIAL FALSIFICATION verdict JSON.",
+            "Uses menus/astronomical/desi/lss_falsification.py (JAX FFT when available).",
         ],
     }
     return instructions.get(
@@ -276,6 +331,23 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
         )
         path = _save_report("calibrate_sound_horizon", report)
         print(f"[TAV ENGINE] Report saved: {path}")
+        return
+
+    if selection == "Run Falsification Suite (Methods 1,4,9)":
+        from menus.astronomical.desi.lss_falsification import run_falsification_suite
+
+        report = run_falsification_suite(
+            n_points=_int_option(options, "n_points", 4096),
+            box_size_mpc=_float_option(options, "box_size_mpc", 3000.0),
+            noise_level=_float_option(options, "noise_level", 0.25),
+            use_jax=_bool_option(options, "use_jax", True),
+            dimension=_int_option(options, "dimension", 1),
+            output_prefix=str(options.get("output_prefix") or "falsification_suite").strip(),
+            plot=_bool_option(options, "plot", False),
+            verbose=True,
+        )
+        print(f"[TAV ENGINE] Falsification suite: {report.get('verdict')}")
+        print(f"[TAV ENGINE] Report: {report.get('report_path')}")
         return
 
     print(f"[TAV ENGINE] Unknown TSB research action: {selection}")

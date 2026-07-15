@@ -296,7 +296,9 @@ class FRBDispersionTavTest:
         ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
         if output_path is None:
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = ARTIFACTS_DIR / f"frb_dispersion_tav_test_{stamp}.json"
+            from tav_shared.artifact_paths import TestSlug, artifact_path
+
+            output_path = artifact_path(TestSlug.FRB, "dispersion_tav_test", "report", "json")
         path = Path(output_path)
         payload = {
             "timestamp": datetime.now().isoformat(),

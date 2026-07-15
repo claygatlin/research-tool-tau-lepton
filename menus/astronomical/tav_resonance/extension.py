@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -88,7 +87,7 @@ def tav_resonance_entry_instructions(action: str) -> list[str]:
     return instructions.get(
         action,
         [
-            "Uses the standalone tav-resonance package (pip install -e ../tav-resonance).",
+            "Uses Research/tav-resonance (pip install -e ../../tav-resonance from scripts/).",
             "Fixed anchors: M₀=313.1 MeV, 1/7 harmonic, α=41.341 — never fitted.",
             "FRB scan reuses datasets/frb/ via frb_fetcher (CHIME + SDSS voids).",
             "Pre-registration export writes JSON under artifacts/.",
@@ -193,20 +192,15 @@ def tav_resonance_entry_fields(action: str) -> list[dict]:
     return _maybe_append_n_points(scan_fields, action)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
-_SIBLING_SRC = PROJECT_ROOT.parent / "tav-resonance" / "src"
+from tav_shared.tav_project_paths import ARTIFACTS_ROOT
+
+ARTIFACTS_DIR = ARTIFACTS_ROOT
 
 
 def _ensure_tav_resonance():
-    try:
-        import tav_resonance  # noqa: F401
-    except ImportError:
-        if _SIBLING_SRC.is_dir():
-            src = str(_SIBLING_SRC)
-            if src not in sys.path:
-                sys.path.insert(0, src)
-        import tav_resonance  # noqa: F401
+    from tav_shared.tav_resonance_bootstrap import ensure_tav_resonance_importable
+
+    ensure_tav_resonance_importable()
 
 
 def _utc_stamp() -> str:
@@ -315,7 +309,9 @@ def _run_frb_scan(options: dict, *, plot: bool) -> None:
     if plot:
         output_prefix = (options.get("output_prefix") or "tav_resonance_frb").strip()
         ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-        plot_path = ARTIFACTS_DIR / f"{output_prefix}_paths.png"
+        from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+        plot_path = artifact_path(TestSlug.TAV_RESONANCE, compose_dataset_slug(output_prefix), "paths", "png")
         counts = result.frame["path_type"].value_counts()
         fig, ax = plt.subplots(figsize=(8, 5))
         counts.plot(kind="bar", ax=ax, title="FRB path mix (tav-resonance)")
@@ -372,9 +368,11 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
     except ImportError as exc:
         print("[TAV ENGINE] tav-resonance package not available.")
         print(f"[ERROR] {exc}")
+        from tav_shared.tav_resonance_bootstrap import tav_resonance_install_hint
+
         print("[TAV ENGINE] Install with:")
-        print("  pip install -e ../tav-resonance")
-        print("  # or: pip install tav-resonance")
+        for line in tav_resonance_install_hint().splitlines():
+            print(f"  {line}")
         return
 
     if selection == "Verify Geometric Anchors":

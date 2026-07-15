@@ -138,6 +138,66 @@ def prepare_covariance(
     return cov_out, health
 
 
+# Tav multi-domain drift + topological friction (session 2026-07-09)
+AUGMENTED_COV_DRIFT_SCALE: float = 0.01
+AUGMENTED_COV_FRICTION_SCALE: float = 0.005
+AUGMENTED_COV_Z_KERNEL_SIGMA: float = 0.3
+FRICTION_P_EXPONENT: float = -2.5
+DELTA_GAMMA_DOMAIN: float = 1.12
+
+
+def build_augmented_cov(
+    base_cov: np.ndarray,
+    z: np.ndarray,
+    *,
+    delta_gamma: float = DELTA_GAMMA_DOMAIN,
+    friction_exponent: float = FRICTION_P_EXPONENT,
+    drift_scale: float = AUGMENTED_COV_DRIFT_SCALE,
+    friction_scale: float = AUGMENTED_COV_FRICTION_SCALE,
+    z_kernel_sigma: float = AUGMENTED_COV_Z_KERNEL_SIGMA,
+) -> np.ndarray:
+    """
+    Add theory-motivated drift + topological friction to the published BAO covariance.
+
+    Implements the additive block from the 2026-07-09 improvement session:
+    secular proper-time domain drift (Delta_gamma) and P(k) ~ k^friction_exponent.
+    """
+    cov = np.asarray(base_cov, dtype=float)
+    z_arr = np.asarray(z, dtype=float).ravel()
+    n = len(z_arr)
+    if cov.shape != (n, n):
+        raise ValueError(f"base_cov {cov.shape} incompatible with n={n} redshifts")
+    extra = np.zeros((n, n), dtype=float)
+    inv_sigma2 = 1.0 / max(z_kernel_sigma**2, 1e-12)
+    for i in range(n):
+        for j in range(n):
+            dz = z_arr[i] - z_arr[j]
+            drift = drift_scale * delta_gamma * np.exp(-0.5 * dz * dz * inv_sigma2)
+            k_eff = 2 * np.pi / max(z_arr[i] + z_arr[j], 1e-6)
+            friction = friction_scale * (k_eff**friction_exponent)
+            extra[i, j] = drift + friction
+    return cov + extra
+
+
+def apply_augmented_covariance(
+    cov: np.ndarray,
+    z: np.ndarray,
+    *,
+    name: str = "",
+    **aug_kw: Any,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Augment covariance, re-run health checks, and return metadata."""
+    augmented = build_augmented_cov(cov, z, **aug_kw)
+    cov_out, health = prepare_covariance(augmented, name=name or "augmented_bao")
+    meta = {
+        "augmented": True,
+        "delta_gamma": aug_kw.get("delta_gamma", DELTA_GAMMA_DOMAIN),
+        "friction_exponent": aug_kw.get("friction_exponent", FRICTION_P_EXPONENT),
+        "base_condition_number": health.get("condition_number"),
+    }
+    return cov_out, meta
+
+
 def _call_model_func(
     model_func: Callable[..., np.ndarray],
     *,

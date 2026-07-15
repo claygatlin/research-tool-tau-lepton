@@ -205,7 +205,9 @@ def plot_lithium_tension_heatmap(
 
     if save_path is None:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_path = ARTIFACTS_DIR / f"li_tension_heatmap_{stamp}.png"
+        from tav_shared.artifact_paths import TestSlug, artifact_path
+
+        save_path = artifact_path(TestSlug.PRIME_PAST, "li_tension", "heatmap", "png")
     path = Path(save_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -253,7 +255,9 @@ def save_enhanced_scan(
     ensure_artifacts_dir()
     best = min(scan_results, key=lambda row: row["li_tension_sigma"])
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = ARTIFACTS_DIR / f"{prefix}_{stamp}.json"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    json_path = artifact_path(TestSlug.PRIME_PAST, compose_dataset_slug(prefix), "report", "json")
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "scan_results": scan_results,

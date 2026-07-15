@@ -25,6 +25,7 @@ SUBMENU_TITLE = "Casimir Tau-SB Scan"
 
 MENU_ACTIONS = [
     "Example Casimir Tau-Search",
+    "TSB Falsification Test Suite (5 predictions)",
     "Scan Local CSV",
     "Download Zenodo Casimir Drums",
     "Download GitHub Magnetic-Fluid Data",
@@ -35,6 +36,11 @@ MENU_ACTIONS = [
 
 _ACTION_CONFIG: dict[str, dict] = {
     "Example Casimir Tau-Search": {
+        "data_source": "mock",
+        "plot": True,
+    },
+    "TSB Falsification Test Suite (5 predictions)": {
+        "falsification": True,
         "data_source": "mock",
         "plot": True,
     },
@@ -186,6 +192,19 @@ def entry_fields(action: str) -> list[dict]:
         ]
     if action == "Scan Local CSV":
         return [f for f in fields if f["key"] != "confirm_large_download"]
+    if action == "TSB Falsification Test Suite (5 predictions)":
+        return [
+            f
+            for f in fields
+            if f["key"]
+            in {
+                "local_csv",
+                "param_col",
+                "value_col",
+                "output_prefix",
+                "show_graphics",
+            }
+        ]
     return fields
 
 
@@ -194,6 +213,14 @@ def entry_fields(action: str) -> list[dict]:
 # =============================================================================
 def entry_instructions(action: str) -> list[str]:
     """Short help bullets shown above the Casimir scanner entry form."""
+    if action == "TSB Falsification Test Suite (5 predictions)":
+        return [
+            "Five explicit TSB vs Lifshitz falsification tests with p-values.",
+            "Predictions: discrete steps, hysteresis, log-Δn modulations, anisotropy, 1/7 periodicity.",
+            "Blank local_csv → synthetic mock; or point to CSV / cached GitHub magnetic-fluid file.",
+            "Outputs: artifacts/tsb_test_results/*_report.json, *_summary.txt, six-panel PNG.",
+            "Complements the broader tau-resonance scan (periodogram, ruptures, tav-resonance cross-check).",
+        ]
     return [
         "Downloads: Zenodo Casimir drums (~780 MB) or GitHub magnetic-fluid Fig2/Fig34 spectra.",
         "Extracts ZIP→CSV/TSV; loads direct CSV, TSV, whitespace, or extensionless tables.",
@@ -216,6 +243,40 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
 
     output_prefix = (options.get("output_prefix") or "tsb_casimir").strip()
     show_popup = parse_show_graphics(options, default="popup") if show_plots else False
+
+    if config.get("falsification"):
+        from menus.particle.casimir.test_framework import run_falsification_from_source
+
+        local_csv = (options.get("local_csv") or "").strip() or None
+        param_col = (options.get("param_col") or "").strip() or None
+        value_col = (options.get("value_col") or "").strip() or None
+        data_source = "local" if local_csv else (config.get("data_source") or "mock")
+        fals_prefix = output_prefix if output_prefix != "tsb_casimir" else "tsb_falsification"
+        try:
+            if local_csv and Path(local_csv).is_file():
+                data_source = "local"
+            elif not local_csv:
+                gh_cache = DATASETS_DIR / "github_magnetic_fluid"
+                if gh_cache.is_dir() and any(gh_cache.rglob("*")):
+                    data_source = "github"
+            report = run_falsification_from_source(
+                data_source=data_source,
+                local_csv=local_csv,
+                param_col=param_col,
+                value_col=value_col,
+                output_prefix=fals_prefix,
+                plot=config.get("plot", True),
+                show_popup=show_popup,
+            )
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            print(f"[TAV ENGINE] TSB falsification suite failed: {exc}")
+            return
+        if show_popup and report.get("plot_path"):
+            _show_saved_plot(report["plot_path"])
+        elif report.get("plot_path"):
+            print(f"[TAV ENGINE] Falsification plot: {report['plot_path']}")
+        print(f"[TAV ENGINE] Report: {report.get('report_path')}")
+        return
 
     if config.get("download_only"):
         if config.get("dataset") == "github":

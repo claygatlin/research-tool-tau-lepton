@@ -445,7 +445,9 @@ def plot_cmb_analysis(
     ax1.tick_params(colors="#ccddee")
     ax1.legend()
     fig1.tight_layout()
-    path1 = ARTIFACTS_DIR / f"{output_prefix}_spectrum.png"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    path1 = artifact_path(TestSlug.PLANCK_CMB, compose_dataset_slug(output_prefix), "spectrum", "png")
     fig1.savefig(path1, dpi=150, facecolor=fig1.get_facecolor())
     saved.append(path1)
     if show:
@@ -471,7 +473,7 @@ def plot_cmb_analysis(
     for ax in axes:
         ax.tick_params(colors="#ccddee")
     fig2.tight_layout()
-    path2 = ARTIFACTS_DIR / f"{output_prefix}_fft.png"
+    path2 = artifact_path(TestSlug.PLANCK_CMB, compose_dataset_slug(output_prefix), "fft", "png")
     fig2.savefig(path2, dpi=150, facecolor=fig2.get_facecolor())
     saved.append(path2)
     if show:

@@ -21,6 +21,9 @@ MEANINGFUL_N_ACTIONS: dict[str, frozenset[str]] = {
             "Joint DESI+SN+Planck Fit",
             "Batch Tracer Scan (All DR2)",
             "Full Production Pipeline",
+            "LSS Comb Falsification (P(k))",
+            "S(n) Node Cross-Correlation",
+            "Gridded Mock Comb Recovery",
         }
     ),
     "frb_web_extension": frozenset(
@@ -41,6 +44,7 @@ MEANINGFUL_N_ACTIONS: dict[str, frozenset[str]] = {
         {
             "Generate Mocks",
             "Generate Full DESI Summary Dashboard",
+            "Run Falsification Suite (Methods 1,4,9)",
         }
     ),
 }
@@ -57,6 +61,9 @@ _N_POINTS_HINTS: dict[str, dict[str, str]] = {
         "MCMC Posteriors (emcee)": "Batch tracer prefetch limit before MCMC",
         "Healpy Dipole Fit": "Batch tracer prefetch limit before dipole fit",
         "Change-Point Detection": "Batch tracer prefetch limit before changepoint scan",
+        "LSS Comb Falsification (P(k))": "1D/3D grid points for P(k) comb search",
+        "S(n) Node Cross-Correlation": "1D grid points for S(n) node recovery",
+        "Gridded Mock Comb Recovery": "1D/3D grid points for mock injection test",
     },
     "frb_web_extension": {
         "Classify FRB Paths": "Max FRBs used in path classifier",
@@ -71,6 +78,7 @@ _N_POINTS_HINTS: dict[str, dict[str, str]] = {
     "tsb_research_extension": {
         "Generate Mocks": "Synthetic mock lattice size",
         "Generate Full DESI Summary Dashboard": "Diagnostic plot grid size (resamples real fit)",
+        "Run Falsification Suite (Methods 1,4,9)": "Gridded δ field resolution for suite",
     },
 }
 
@@ -115,6 +123,12 @@ def desi_n_knobs(action: str, n: int) -> dict[str, int]:
         return {"n_freq": n, "n_injection_trials": n, "max_sne": n}
     if action in {"Real DESI DR2 Scan (Cobaya)", "Model Compare (ΛCDM vs aDE vs Tau-SB)"}:
         return {"n_freq": n}
+    if action in {
+        "LSS Comb Falsification (P(k))",
+        "S(n) Node Cross-Correlation",
+        "Gridded Mock Comb Recovery",
+    }:
+        return {"grid_n_points": n}
     return {}
 
 

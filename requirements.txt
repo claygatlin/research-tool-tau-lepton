@@ -11,11 +11,15 @@ healpy>=1.14
 
 # Data I/O (Planck FITS, ROOT, remote catalogs)
 requests>=2.31
+gwdatafind>=2.1
+requests-pelican>=0.2
+h5py>=3.11
 PyYAML>=6.0
 beautifulsoup4>=4.12
 uproot>=5.3
 awkward>=2.6
 xrootd>=6.1
+cernopendata-client>=1.0
 
 # Analysis / visualization
 plotly>=5.0

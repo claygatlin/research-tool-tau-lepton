@@ -82,9 +82,32 @@ def _register_ensures() -> None:
 
         return _ensure
 
+    def _cern(action: str, options: dict[str, Any]) -> None:
+        if action == "Pull Datasets from Open Archives":
+            return
+        from menus.particle.cern.manifest import ACTION_DEFAULT_TARGETS
+
+        targets = ACTION_DEFAULT_TARGETS.get(action, [])
+        if not targets:
+            return
+        from menus.particle.cern.fetcher import pull_selected_targets
+
+        force = str(options.get("force_refresh", "no")).lower() in {"yes", "y", "true", "1"}
+        restore = str(options.get("restore_archived", "yes")).lower() in {"yes", "y", "true", "1"}
+        print(f"[TAV ENGINE] Auto-fetch: CERN Open Data ({', '.join(targets)})")
+        result = pull_selected_targets(
+            targets,
+            params={"restore_archived": "yes" if restore else "no"},
+            force_refresh=force,
+        )
+        if result.failed:
+            for key, msg in result.failed.items():
+                raise RuntimeError(f"CERN fetch failed for {key}: {msg}")
+
     _MODULE_ENSURES["TAU_SB_DESI"] = _desi
     _MODULE_ENSURES["FRB_COSMIC_WEB_TAV"] = _frb
     _MODULE_ENSURES["SPARC"] = _sparc
+    _MODULE_ENSURES["CERN_OPENDATA"] = _cern
     for tag in ("EMPIRICAL_TESTS", "LHCB_TAV_ECHO", "TAV_DATA_INTEGRATOR", "PLANCK_CMB_TAV"):
         _MODULE_ENSURES[tag] = _registry(tag)
 
@@ -106,6 +129,10 @@ def _default_registry_targets(module_tag: str, action: str, options: dict[str, A
         return remote[:3] if remote else []
     if module_tag == "LHCB_TAV_ECHO":
         return [t.id for t in provider.list_fetchable() if "lhcb:" in t.id][:1]
+    if module_tag == "CERN_OPENDATA":
+        from menus.particle.cern.manifest import ACTION_DEFAULT_TARGETS
+
+        return [f"cern:{key}" for key in ACTION_DEFAULT_TARGETS.get(action, [])]
     return remote
 
 

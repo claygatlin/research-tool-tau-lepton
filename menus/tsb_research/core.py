@@ -62,7 +62,7 @@ except ImportError:
 
 GEOMETRIC_FRICTION_FLOOR = LAMBDA_TSB
 SQRT2 = float(np.sqrt(2.0))
-RD_OBSERVED_MPC = 147.0
+RD_OBSERVED_MPC = 147.09
 GAMMA_RD_ANCHOR = 8.0
 
 try:
@@ -304,7 +304,7 @@ class SoundHorizon:
         hier_factor = np.exp(-self.tsv.cylinder.n_hier / 52.0)
         pressure_anchor = 1.0 + 0.015 * (phi_scale - 1.0)
 
-        r_d_base = 147.0 * (self.m0 / 313.1) * hier_factor * pressure_anchor
+        r_d_base = RD_OBSERVED_MPC * (self.m0 / 313.1) * hier_factor * pressure_anchor
         gamma_correction = 1.0 + 0.0015 * (gamma - 9.0)
 
         return float(r_d_base * gamma_correction)

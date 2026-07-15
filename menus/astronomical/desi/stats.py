@@ -7,6 +7,30 @@ from typing import Any
 import numpy as np
 from scipy import signal
 
+def oversample_s_phase_coherent(
+    s: np.ndarray,
+    residuals: np.ndarray,
+    *,
+    n_target: int = 96,
+) -> tuple[np.ndarray, np.ndarray, bool]:
+    """
+    Interpolate (s, residuals) onto a uniform dense s-grid.
+
+    Used when n BAO points is too small for 1/7 Lomb resolution (Nyquist washout).
+    Returns (s_dense, y_dense, was_oversampled).
+    """
+    s = np.asarray(s, dtype=float)
+    y = np.asarray(residuals, dtype=float)
+    if len(s) >= n_target or len(s) < 3:
+        return s, y, False
+    order = np.argsort(s)
+    s_sorted = s[order]
+    y_sorted = y[order]
+    s_dense = np.linspace(float(s_sorted[0]), float(s_sorted[-1]), int(n_target))
+    y_dense = np.interp(s_dense, s_sorted, y_sorted)
+    return s_dense, y_dense, True
+
+
 def diagnose_frequency_grid(
     s_array: np.ndarray,
     *,
@@ -469,13 +493,21 @@ def tav_harmonic_check_robust(
     diag = diagnose_frequency_grid(s, period=period)
     expected_f = 1.0 / period
 
+    s_lomb, resid_lomb, oversampled = oversample_s_phase_coherent(
+        s, resid, n_target=max(96, int(diag["recommended_n_bins"]))
+    )
+    if oversampled and n < 12:
+        diag = diagnose_frequency_grid(s_lomb, period=period)
+
     boot = bootstrap_lomb_scargle_pvalue(
-        s, resid, freq=expected_f, n_bootstrap=n_bootstrap, seed=seed
+        s_lomb, resid_lomb, freq=expected_f, n_bootstrap=n_bootstrap, seed=seed
     )
 
     result: dict[str, Any] = {
         "method": "lomb_scargle_bootstrap",
         "n_data": n,
+        "n_lomb_grid": int(len(s_lomb)),
+        "s_oversampled": oversampled,
         "n_freq_bins": int(max(50, diag["recommended_n_bins"])),
         "cycles_possible": diag["cycles_possible"],
         "s_grid_warning": diag["warning"],
@@ -501,6 +533,9 @@ def tav_harmonic_check_robust(
         return result
 
     try:
+        from tav_shared.tav_resonance_bootstrap import ensure_tav_resonance_importable
+
+        ensure_tav_resonance_importable()
         from tav_resonance import analyze_tav_harmonics
 
         freqs_t, _power_t, peaks, detected = analyze_tav_harmonics(

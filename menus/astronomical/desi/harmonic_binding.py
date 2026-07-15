@@ -33,7 +33,6 @@ BINDING_LEVEL_NAMES: tuple[str, ...] = (
 # DESI DR2 tracer redshift windows for overlap tests
 DESI_TRACER_Z_WINDOWS: dict[str, tuple[float, float]] = {
     "BGS_BRIGHT-21.35_GCcomb": (0.1, 0.4),
-    "BGS_BRIGHT-21.5_GCcomb_z0.1-0.4": (0.1, 0.4),
     "LRG_GCcomb_z0.4-0.6": (0.4, 0.6),
     "LRG_GCcomb_z0.6-0.8": (0.6, 0.8),
     "LRG+ELG_LOPnotqso_GCcomb_z0.8-1.1": (0.8, 1.1),

@@ -194,7 +194,9 @@ def run_improved_scan(
     )
     print(f"Best config saved to: {BEST_CONFIG_PATH}")
 
-    scan_path = ARTIFACTS_DIR / f"tav_bbn_menu_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    from tav_shared.artifact_paths import TestSlug, artifact_path
+
+    scan_path = artifact_path(TestSlug.PRIME_PAST, "bbn_menu", "scan", "json")
     scan_path.write_text(
         json.dumps(
             {
@@ -321,7 +323,7 @@ def run_high_resolution_around_best(
         json.dumps(best, indent=2, default=float) + "\n",
         encoding="utf-8",
     )
-    out = ARTIFACTS_DIR / f"tav_bbn_hires_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    out = artifact_path(TestSlug.PRIME_PAST, "bbn_hires", "scan", "json")
     out.write_text(
         json.dumps({"center": center, "scan_results": results, "best": best}, indent=2, default=float)
         + "\n",

@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MENU_LAYOUT: dict[str, list[str]] = {
     "astronomical": ["sparc", "frb", "tav_resonance", "desi", "halogas"],
     "gravitic": ["ligo", "lisa"],
-    "particle": ["lhcb", "casimir", "hepdata", "cms", "atlas", "alice", "belle"],
+    "particle": ["lhcb", "rgc", "casimir", "hepdata", "cms", "atlas", "alice", "belle"],
     "prime_past": [],
     "empirical_tests": [],
     "tsb_research": [],

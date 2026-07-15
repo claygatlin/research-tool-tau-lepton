@@ -215,7 +215,9 @@ def _run_analyzer_for_galaxy(
     print(f"[TAV ENGINE] Data file: {csv_path}")
 
     if action in {"rotation_curve", "full_analysis", "empirical_mcmc"}:
-        plot_path = ARTIFACTS_DIR / f"sparc_{galaxy}_rotation.png"
+        from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+        plot_path = artifact_path(TestSlug.SPARC, compose_dataset_slug(galaxy, "rotation"), "plot", "png")
         analyzer.plot_rotation_curve(galaxy, show=show_plots, save_path=str(plot_path))
         print(f"[TAV ENGINE] Rotation curve saved: {plot_path}")
         if show_plots:
@@ -297,7 +299,7 @@ def _run_superblock_for_galaxy(
         if theory_curve.empty:
             print(f"[ERROR] No rotation curve data for {galaxy}")
             return
-        plot_path = ARTIFACTS_DIR / f"sparc_superblock_{galaxy}_emergent_dm.png"
+        plot_path = artifact_path(TestSlug.SPARC, compose_dataset_slug(galaxy, "emergent_dm"), "plot", "png")
         sparc.plot_rotation_curve(
             galaxy, theory_curve=theory_curve, show=show_plots, save_path=str(plot_path)
         )
@@ -319,7 +321,7 @@ def _run_superblock_for_galaxy(
             theory_curve = sparc.predict_emergent_dm_velocity(
                 galaxy, beta2=fit["beta2"], phase_offset=fit["phase_offset"]
             )
-            plot_path = ARTIFACTS_DIR / f"sparc_superblock_{galaxy}_fit.png"
+            plot_path = artifact_path(TestSlug.SPARC, compose_dataset_slug(galaxy, "fit"), "plot", "png")
             sparc.plot_rotation_curve(
                 galaxy, theory_curve=theory_curve, show=show_plots, save_path=str(plot_path)
             )
@@ -339,7 +341,7 @@ def _run_superblock_for_galaxy(
         theory_curve = sparc.predict_emergent_dm_velocity(
             galaxy, beta2=beta2, phase_offset=phase, theory=theory
         )
-        plot_path = ARTIFACTS_DIR / f"sparc_superblock_{galaxy}_full_demo.png"
+        plot_path = artifact_path(TestSlug.SPARC, compose_dataset_slug(galaxy, "full_demo"), "plot", "png")
         sparc.plot_rotation_curve(
             galaxy, theory_curve=theory_curve, show=show_plots, save_path=str(plot_path)
         )

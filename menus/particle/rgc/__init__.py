@@ -1,0 +1,1 @@
+"""RGC (Resonance Graph Core) particle mock-catalog tools."""

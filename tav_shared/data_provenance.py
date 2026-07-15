@@ -12,13 +12,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from tav_shared.tav_project_paths import TAU_SUPERBLOCK_ROOT as PROJECT_ROOT
+from tav_shared.tav_project_paths import ARTIFACTS_ROOT, TAU_SUPERBLOCK_ROOT as PROJECT_ROOT
 
 DATASETS_DESI = PROJECT_ROOT / "datasets" / "desi"
 COBAYA_DR2 = DATASETS_DESI / "bao_data" / "desi_bao_dr2"
 SPARC_DATA = PROJECT_ROOT / "data" / "sparc"
 SPARC_DATASETS = PROJECT_ROOT / "datasets" / "sparc"
 PANTHEON = DATASETS_DESI / "pantheon_plus" / "Pantheon+SH0ES.dat"
+GWOSC_DATASETS = PROJECT_ROOT / "datasets" / "gwosc"
+LISA_DATASETS = PROJECT_ROOT / "datasets" / "lisa"
+CERN_DATASETS = PROJECT_ROOT / "datasets" / "cern"
 
 DataClass = Literal["real_cached", "real_remote", "synthetic", "theoretical", "mixed"]
 
@@ -54,6 +57,16 @@ def dataset_availability() -> dict[str, Any]:
         "sparc_available": sparc_count > 0,
         "pantheon_plus_available": PANTHEON.is_file(),
         "pantheon_plus_path": str(PANTHEON),
+        "gwosc_strain_files": _count_glob(GWOSC_DATASETS, "*") + sum(
+            1 for _ in GWOSC_DATASETS.rglob("*") if _.is_file()
+        ) if GWOSC_DATASETS.is_dir() else 0,
+        "gwosc_available": GWOSC_DATASETS.is_dir() and any(GWOSC_DATASETS.rglob("*")),
+        "lisa_files": sum(1 for _ in LISA_DATASETS.rglob("*") if _.is_file()) if LISA_DATASETS.is_dir() else 0,
+        "lisa_available": LISA_DATASETS.is_dir() and any(LISA_DATASETS.rglob("*")),
+        "cern_root_files": _count_glob(CERN_DATASETS, "*.root") + sum(
+            1 for _ in CERN_DATASETS.rglob("*.root") if _.is_file()
+        ) if CERN_DATASETS.is_dir() else 0,
+        "cern_available": CERN_DATASETS.is_dir() and any(CERN_DATASETS.rglob("*.root")),
     }
 
 
@@ -181,6 +194,88 @@ def _entries_frb() -> list[ProvenanceEntry]:
     ]
 
 
+def _entries_gravitic(avail: dict[str, Any]) -> list[ProvenanceEntry]:
+    gwosc_repo = "https://gwosc.org/ + GWDataFind + Pelican OSDF"
+    lisa_repo = "IGWN OSDF (Pelican) + requests-pelican"
+    gwosc_ok = avail.get("gwosc_available", False)
+    lisa_ok = avail.get("lisa_available", False)
+    gwosc_dc: DataClass = "real_cached" if gwosc_ok else "real_remote"
+    lisa_dc: DataClass = "real_cached" if lisa_ok else "real_remote"
+    return [
+        ProvenanceEntry(
+            "LIGO_GWOSC",
+            "Pull Strain from GWOSC",
+            gwosc_dc,
+            gwosc_repo,
+            str(GWOSC_DATASETS),
+            gwosc_ok,
+            "GWOSC Event API strain files; GWDataFind segments; Pelican/osdf URIs.",
+        ),
+        ProvenanceEntry(
+            "LIGO_GWOSC",
+            "Ringdown Harmonic Scan (1/7)",
+            gwosc_dc,
+            gwosc_repo,
+            str(GWOSC_DATASETS),
+            gwosc_ok,
+            "Cached strain ringdown PSD + 1/7 sub-harmonic excess (Tav falsification hook).",
+        ),
+        ProvenanceEntry(
+            "LIGO_GWOSC",
+            "Full Ringdown Report",
+            gwosc_dc,
+            gwosc_repo,
+            str(ARTIFACTS_ROOT),
+            gwosc_ok,
+            "Multi-detector ringdown JSON/PNG under artifacts/.",
+        ),
+        ProvenanceEntry(
+            "LISA_PRE_RUNS",
+            "LISA Pre-runs",
+            lisa_dc,
+            lisa_repo,
+            str(LISA_DATASETS),
+            lisa_ok,
+            "IGWN/LISA mock data via requests-pelican and pelican CLI.",
+        ),
+    ]
+
+
+def _entries_cern(avail: dict[str, Any]) -> list[ProvenanceEntry]:
+    cern_ok = avail["cern_available"]
+    cern_dc: DataClass = "real_cached" if cern_ok else "real_remote"
+    cern_repo = "CERN Open Data Portal (opendata.cern.ch)"
+    return [
+        ProvenanceEntry(
+            "CERN_OPENDATA",
+            "Pull Datasets from Open Archives",
+            cern_dc,
+            cern_repo,
+            str(CERN_DATASETS),
+            cern_ok,
+            "REST API fetch into datasets/cern/<target>/recid_<N>/; no browser.",
+        ),
+        ProvenanceEntry(
+            "CERN_OPENDATA",
+            "Analyze CMS NanoAOD",
+            cern_dc,
+            cern_repo,
+            str(CERN_DATASETS),
+            cern_ok,
+            "Uproot + awkward on cached CMS NanoAOD Events tree.",
+        ),
+        ProvenanceEntry(
+            "CERN_OPENDATA",
+            "Analyze ALICE ROOT Sample",
+            cern_dc,
+            cern_repo,
+            str(CERN_DATASETS),
+            cern_ok,
+            "O2 AO2D tracks when present; legacy esdTree multiplicity fallback.",
+        ),
+    ]
+
+
 def _entries_planck() -> list[ProvenanceEntry]:
     return [
         ProvenanceEntry(
@@ -206,6 +301,8 @@ def provenance_entries(
     if scope == "all":
         entries.extend(_entries_integrator())
         entries.extend(_entries_frb())
+        entries.extend(_entries_gravitic(avail))
+        entries.extend(_entries_cern(avail))
         entries.extend(_entries_planck())
     return entries
 

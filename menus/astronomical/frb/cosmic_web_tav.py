@@ -338,7 +338,9 @@ def plot_frb_web_analysis(
         ax.tick_params(colors="#ccddee")
 
     fig1.tight_layout()
-    path1 = ARTIFACTS_DIR / f"{prefix}_paths.png"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    path1 = artifact_path(TestSlug.FRB, compose_dataset_slug(prefix), "paths", "png")
     fig1.savefig(path1, dpi=150, facecolor=fig1.get_facecolor())
     saved.append(path1)
     if show:
@@ -364,7 +366,7 @@ def plot_frb_web_analysis(
         ax2.set_facecolor("#0a0a18")
         ax2.tick_params(colors="#ccddee")
         fig2.tight_layout()
-        path2 = ARTIFACTS_DIR / f"{prefix}_periodogram.png"
+        path2 = artifact_path(TestSlug.FRB, compose_dataset_slug(prefix), "periodogram", "png")
         fig2.savefig(path2, dpi=150, facecolor=fig2.get_facecolor())
         saved.append(path2)
         if show:

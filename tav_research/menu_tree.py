@@ -19,6 +19,7 @@ from tav_research.dataset_manager import (
     DATASET_MANAGER_TITLE,
     DATASET_RUN_ACTION,
 )
+from tav_research.gateway_launcher import GATEWAY_GUI_MENU_LABEL
 from tav_research.registry import MODULE_EXTENSIONS
 from tav_research import registry
 
@@ -26,6 +27,7 @@ from tav_research import registry
 def build_menu_tree():
     """Return (domains, repos, submenus, module_action_map) for the curses UI."""
     domains = [
+        GATEWAY_GUI_MENU_LABEL,
         "Astronomical (Conformal Shadows)",
         "Gravitic (Planck-Kerr Seeds)",
         "Particle (Dynamic Refresh)",
@@ -63,9 +65,25 @@ def build_menu_tree():
         submenus[registry.tsb_casimir_extension.SUBMENU_TITLE] = append_reset_option(
             list(registry.tsb_casimir_extension.MENU_ACTIONS)
         )
+    if registry.rgc_mock_extension is not None:
+        submenus[registry.rgc_mock_extension.SUBMENU_TITLE] = append_reset_option(
+            list(registry.rgc_mock_extension.MENU_ACTIONS)
+        )
     if registry.integrator_extension is not None:
         submenus[registry.integrator_extension.SUBMENU_TITLE] = append_reset_option(
             list(registry.integrator_extension.MENU_ACTIONS)
+        )
+    if registry.ligo_gwosc_extension is not None:
+        submenus[registry.ligo_gwosc_extension.SUBMENU_TITLE] = append_reset_option(
+            list(registry.ligo_gwosc_extension.MENU_ACTIONS)
+        )
+    if registry.lisa_pre_runs_extension is not None:
+        submenus[registry.lisa_pre_runs_extension.SUBMENU_TITLE] = append_reset_option(
+            list(registry.lisa_pre_runs_extension.MENU_ACTIONS)
+        )
+    if registry.cern_opendata_extension is not None:
+        submenus[registry.cern_opendata_extension.SUBMENU_TITLE] = append_reset_option(
+            list(registry.cern_opendata_extension.MENU_ACTIONS)
         )
 
     repos = {
@@ -89,11 +107,29 @@ def build_menu_tree():
             "HALOGAS (HI Data Cubes)",
         ],
         "Gravitic (Planck-Kerr Seeds)": [
-            "LIGO GWOSC (Strain Data)",
-            "LISA Pre-runs",
+            *(
+                [registry.ligo_gwosc_extension.SUBMENU_TITLE]
+                if registry.ligo_gwosc_extension is not None
+                else ["LIGO GWOSC (Strain Data)"]
+            ),
+            *(
+                [registry.lisa_pre_runs_extension.SUBMENU_TITLE]
+                if registry.lisa_pre_runs_extension is not None
+                else ["LISA Pre-runs"]
+            ),
         ],
         "Particle (Dynamic Refresh)": [
             lhcb_echo_extension.SUBMENU_TITLE,
+            *(
+                [registry.cern_opendata_extension.SUBMENU_TITLE]
+                if registry.cern_opendata_extension is not None
+                else []
+            ),
+            *(
+                [registry.rgc_mock_extension.SUBMENU_TITLE]
+                if registry.rgc_mock_extension is not None
+                else []
+            ),
             *(
                 [registry.tsb_casimir_extension.SUBMENU_TITLE]
                 if registry.tsb_casimir_extension is not None

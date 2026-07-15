@@ -828,11 +828,13 @@ def ensure_frb_datasets(
     *,
     force_refresh: bool = False,
     restore_archived: bool = True,
+    auto_fetch: bool = True,
 ) -> FetchSummary:
     """Auto-pull FRB + void catalogs when missing (analysis entry point)."""
     return pull_open_archives(
         force_refresh=force_refresh,
         restore_archived=restore_archived,
+        auto_fetch=auto_fetch,
     )
 
 
@@ -840,6 +842,7 @@ def pull_open_archives(
     *,
     force_refresh: bool = False,
     restore_archived: bool = True,
+    auto_fetch: bool = True,
 ) -> FetchSummary:
     """Download FRB + void catalogs into datasets/frb/ (ledger-aware)."""
     summary = FetchSummary()
@@ -847,7 +850,7 @@ def pull_open_archives(
         summary.frb_path, summary.frb_source = ensure_chime_catalog(
             force_refresh=force_refresh,
             restore_archived=restore_archived,
-            auto_fetch=True,
+            auto_fetch=auto_fetch,
         )
     except FileNotFoundError as exc:
         summary.warnings.append(str(exc))
@@ -855,7 +858,7 @@ def pull_open_archives(
         summary.void_path, summary.void_source = ensure_void_catalog(
             force_refresh=force_refresh,
             restore_archived=restore_archived,
-            auto_fetch=True,
+            auto_fetch=auto_fetch,
         )
     except FileNotFoundError as exc:
         summary.warnings.append(str(exc))

@@ -42,9 +42,15 @@ from tav_shared.batch_ledger import (
     select_batch_items,
 )
 
+from tav_shared.artifact_paths import (
+    ARTIFACTS_DIR,
+    TestSlug,
+    artifact_path,
+    artifact_timestamp,
+    compose_dataset_slug,
+    test_artifacts_dir,
+)
 from tav_shared.tav_project_paths import TAU_SUPERBLOCK_ROOT as PROJECT_ROOT
-
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 DATASETS_DIR = PROJECT_ROOT / "datasets" / "casimir"
 DEFAULT_DONE_FILE = CASIMIR_BATCH_DONE
 
@@ -90,13 +96,8 @@ COLUMN_ALIASES: dict[str, str] = {
 }
 
 
-def _utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-
-
 def _ensure_artifacts() -> Path:
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    return ARTIFACTS_DIR
+    return test_artifacts_dir(TestSlug.CASIMIR)
 
 
 def _ensure_datasets() -> Path:
@@ -133,6 +134,9 @@ def casimir_batch_status(
 
 def _try_tav_harmonic_check(residuals: np.ndarray) -> dict[str, Any] | None:
     try:
+        from tav_shared.tav_resonance_bootstrap import ensure_tav_resonance_importable
+
+        ensure_tav_resonance_importable()
         from tav_resonance import analyze_tav_harmonics
     except ImportError:
         return None
@@ -722,7 +726,7 @@ def plot_and_save(
 
     fig.suptitle("TSB Casimir Tau Resonance Search", fontsize=12)
     fig.tight_layout()
-    plot_path = out_dir / f"{prefix}_{_utc_stamp()}.png"
+    plot_path = artifact_path(TestSlug.CASIMIR, compose_dataset_slug(prefix), "plot", "png")
     fig.savefig(plot_path, dpi=150)
     plt.close(fig)
     results.setdefault("plots", []).append(str(plot_path))
@@ -785,10 +789,9 @@ class CasimirScanResult:
 
 
 def _write_report(result: CasimirScanResult, output_prefix: str, diagnostics: dict | None = None) -> tuple[str, str]:
-    out_dir = _ensure_artifacts()
-    stamp = _utc_stamp()
-    report_path = out_dir / f"{output_prefix}_report_{stamp}.json"
-    text_path = out_dir / f"{output_prefix}_summary_{stamp}.txt"
+    dataset = compose_dataset_slug(output_prefix, result.data_label)
+    report_path = artifact_path(TestSlug.CASIMIR, dataset, "report", "json")
+    text_path = artifact_path(TestSlug.CASIMIR, dataset, "summary", "txt")
     payload = {
         "data_label": result.data_label,
         "file_path": result.file_path,
@@ -961,8 +964,12 @@ def run_batch_casimir_scan(
         append_done_entries(done_file, completed_keys)
         print(f"[TSB Casimir] Recorded {len(completed_keys)} file(s) in {done_file}")
 
-    out_dir = _ensure_artifacts()
-    summary_path = out_dir / f"{output_prefix}_summary_{_utc_stamp()}.json"
+    summary_path = artifact_path(
+        TestSlug.CASIMIR,
+        compose_dataset_slug(output_prefix, "batch"),
+        "batch_summary",
+        "json",
+    )
     payload = {
         "directory": str(directory),
         "done_file": str(done_file),

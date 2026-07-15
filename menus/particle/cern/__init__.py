@@ -1,0 +1,1 @@
+"""CERN Open Data — programmatic fetch and native uproot analysis."""

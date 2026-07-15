@@ -61,6 +61,16 @@ DEFAULT_MODELS = {
     "claude": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
 }
 
+# Gateway provider id → llm_analysis provider id (see scripts/gateway.py PRESETS)
+GATEWAY_PROVIDER_MAP = {
+    "xai": "grok",
+    "gemini": "gemini",
+    "anthropic": "claude",
+    "nvidia": "nvidia_nim",
+    "local": "ollama",
+    "openai": "openai",
+}
+
 
 @dataclass
 class ProviderResult:
@@ -100,15 +110,70 @@ class AnalysisBundle:
         }
 
 
+def load_gateway_live_models(options: dict | None = None) -> list[dict[str, str]] | None:
+    """
+    Live models from gateway startup probe (session-specific).
+
+    Set by gateway via options['gateway_live_models'] or GATEWAY_LIVE_MODELS env JSON.
+    """
+    raw = (options or {}).get("gateway_live_models")
+    if raw is not None:
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                return None
+        else:
+            parsed = raw
+        if isinstance(parsed, list):
+            out: list[dict[str, str]] = []
+            for row in parsed:
+                if not isinstance(row, dict):
+                    continue
+                provider = str(row.get("provider") or "").strip()
+                model = str(row.get("model") or "").strip()
+                if provider and model:
+                    entry = {"provider": provider, "model": model}
+                    preset = row.get("preset")
+                    if preset:
+                        entry["preset"] = str(preset)
+                    out.append(entry)
+            return out or None
+    env = os.environ.get("GATEWAY_LIVE_MODELS", "").strip()
+    if env:
+        try:
+            return load_gateway_live_models({"gateway_live_models": env})
+        except Exception:
+            return None
+    return None
+
+
+def gateway_live_model_labels(live_models: list[dict[str, str]] | None) -> list[str]:
+    """Human-readable endpoint labels for logging."""
+    if not live_models:
+        return []
+    labels: list[str] = []
+    for row in live_models:
+        preset = row.get("preset")
+        if preset:
+            labels.append(f"{preset} ({row['provider']}/{row['model']})")
+        else:
+            labels.append(f"{row['provider']}/{row['model']}")
+    return labels
+
+
 def llm_analysis_entry_fields() -> list[dict]:
     """Form fields for research_tool.py module entry screens."""
+    gateway_hint = ""
+    if load_gateway_live_models():
+        gateway_hint = " When launched from gateway, 'all' uses live probed models only."
     return [
         {
             "key": "llm_analysis",
             "label": "AI verbose review",
             "default": "no",
             "required": False,
-            "hint": "Query Grok, Gemini, ChatGPT, Claude on run output (needs API keys)",
+            "hint": "Query remote LLMs on run output (needs API keys)." + gateway_hint,
             "choices": ["no", "yes"],
         },
         {
@@ -116,7 +181,10 @@ def llm_analysis_entry_fields() -> list[dict]:
             "label": "LLM providers",
             "default": "all",
             "required": False,
-            "hint": "all | grok,gemini,openai,claude,openrouter,ollama,nvidia_nim",
+            "hint": (
+                "all | grok,gemini,openai,claude,openrouter,ollama,nvidia_nim"
+                + gateway_hint
+            ),
         },
     ]
 
@@ -134,6 +202,15 @@ def should_run_llm_analysis(options: dict | None) -> bool:
 
 def parse_provider_list(options: dict | None) -> list[str]:
     raw = str((options or {}).get("llm_providers") or "all").strip().lower()
+    gateway_live = load_gateway_live_models(options)
+    if gateway_live and (not raw or raw in {"all", "*"}):
+        ids: list[str] = []
+        for row in gateway_live:
+            llm_id = GATEWAY_PROVIDER_MAP.get(row["provider"])
+            if llm_id and llm_id not in ids:
+                ids.append(llm_id)
+        if ids:
+            return ids
     if not raw or raw in {"all", "*"}:
         return ["grok", "gemini", "openai", "claude", "openrouter", "ollama", "nvidia_nim"]
     selected: list[str] = []
@@ -625,16 +702,76 @@ def _extended_provider_fn(name: str):
     return None
 
 
+def _gateway_live_targets(
+    live_models: list[dict[str, str]],
+    *,
+    provider_filter: list[str] | None = None,
+) -> list[tuple[str, str, str, str]]:
+    """
+    Expand gateway live rows into query jobs.
+
+    Returns (llm_provider_id, gateway_provider, model, result_label).
+    """
+    want = set(provider_filter or [])
+    jobs: list[tuple[str, str, str, str]] = []
+    for row in live_models:
+        gw_provider = row["provider"]
+        model = row["model"]
+        llm_id = GATEWAY_PROVIDER_MAP.get(gw_provider)
+        if llm_id is None:
+            continue
+        if want and llm_id not in want:
+            continue
+        preset = row.get("preset") or ""
+        label = preset or f"{gw_provider}/{model}"
+        jobs.append((llm_id, gw_provider, model, label))
+    return jobs
+
+
 def query_all_providers(
     prompt: str,
     *,
     providers: list[str] | None = None,
     models: dict[str, str] | None = None,
+    gateway_live: list[dict[str, str]] | None = None,
+    options: dict | None = None,
 ) -> list[ProviderResult]:
     """Query each requested provider; skipped providers return skip_reason."""
+    gateway_live = gateway_live if gateway_live is not None else load_gateway_live_models(options)
+    if gateway_live:
+        want = providers or parse_provider_list(options)
+        results: list[ProviderResult] = []
+        for llm_id, _gw, model, label in _gateway_live_targets(
+            gateway_live, provider_filter=want
+        ):
+            fn = _extended_provider_fn(llm_id)
+            if fn is None:
+                results.append(
+                    ProviderResult(
+                        provider=label,
+                        model=model,
+                        skipped=True,
+                        skip_reason=f"unknown provider '{llm_id}'",
+                    )
+                )
+                continue
+            row = fn(prompt, model=model)
+            if label != llm_id:
+                row = ProviderResult(
+                    provider=label,
+                    model=row.model or model,
+                    analysis=row.analysis,
+                    error=row.error,
+                    latency_s=row.latency_s,
+                    skipped=row.skipped,
+                    skip_reason=row.skip_reason,
+                )
+            results.append(row)
+        return results
+
     want = providers or list(_PROVIDER_FN)
     models = models or {}
-    results: list[ProviderResult] = []
+    results = []
     for name in want:
         fn = _extended_provider_fn(name)
         if fn is None:
@@ -688,11 +825,25 @@ def analyze_run_output(
         ade_comparison=ade_comparison,
     )
     providers = parse_provider_list(options)
+    gateway_live = load_gateway_live_models(options)
 
     print(f"\n[TAV ENGINE] LLM verbose analysis — {module_tag} / {action}")
-    print(f"[TAV ENGINE] Providers: {', '.join(providers)} | prompt chars: {len(prompt)}")
+    if gateway_live:
+        labels = gateway_live_model_labels(gateway_live)
+        print(
+            f"[TAV ENGINE] Gateway live models ({len(labels)}): "
+            + ", ".join(labels)
+            + f" | prompt chars: {len(prompt)}"
+        )
+    else:
+        print(
+            f"[TAV ENGINE] Providers: {', '.join(providers)} "
+            f"| prompt chars: {len(prompt)}"
+        )
 
-    results = query_all_providers(prompt, providers=providers)
+    results = query_all_providers(
+        prompt, providers=providers, gateway_live=gateway_live, options=options
+    )
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     bundle = AnalysisBundle(
         module_tag=module_tag,
@@ -705,7 +856,9 @@ def analyze_run_output(
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     slug = "".join(ch if ch.isalnum() else "_" for ch in f"{module_tag}_{action}".lower()).strip("_")
-    json_path = ARTIFACTS_DIR / f"llm_analysis_{slug}_{stamp}.json"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    json_path = artifact_path(TestSlug.LLM_ANALYSIS, compose_dataset_slug(slug), "report", "json")
     from menus.astronomical.desi.json_util import write_json
 
     write_json(json_path, bundle.to_dict(), indent=2, sort_keys=True)

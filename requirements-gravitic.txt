@@ -1,0 +1,6 @@
+# Gravitic / GWOSC / LISA data access stack
+# Install: scripts/research_tool/install_gravitic_deps.sh
+
+gwdatafind>=2.1
+requests-pelican>=0.2
+h5py>=3.11

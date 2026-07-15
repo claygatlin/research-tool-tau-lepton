@@ -280,7 +280,9 @@ def save_bbn_report(comparison: dict[str, Any], *, prefix: str = "bbn_interferen
     """Write JSON report under artifacts/prime_past/."""
     ensure_artifacts_dir()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = ARTIFACTS_DIR / f"{prefix}_{stamp}.json"
+    from tav_shared.artifact_paths import TestSlug, artifact_path, compose_dataset_slug
+
+    path = artifact_path(TestSlug.PRIME_PAST, compose_dataset_slug(prefix), "report", "json")
     path.write_text(json.dumps(comparison, indent=2) + "\n", encoding="utf-8")
     print(f"[TAV ENGINE] BBN report saved: {path}")
     return str(path)
