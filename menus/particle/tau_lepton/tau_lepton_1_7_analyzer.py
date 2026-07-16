@@ -82,11 +82,34 @@ class TauLepton17Analyzer:
         return "\n".join(lines)
 
 
-# Quick smoke test
+# ----------------------------------------------------------------------
+# Improved smoke / synthetic test
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
-    # Synthetic data for testing
+    import numpy as np
+
     rng = np.random.default_rng(42)
-    synthetic = rng.normal(loc=1.777, scale=0.1, size=50000)  # rough tau mass scale
+
+    # Realistic base distribution around the tau mass (GeV)
+    n_events = 50_000
+    base = rng.normal(loc=1.777, scale=0.12, size=n_events)
+
+    # Optional: inject a controlled 1/7 excess for testing sensitivity
+    # Set inject_excess = True to see a real (synthetic) signal
+    inject_excess = True
+    if inject_excess:
+        # Force ~18% of events into a preferred residue (residue 2 for example)
+        preferred_residue = 2
+        n_signal = int(0.18 * n_events)
+        # Create values that land in the preferred residue after mod 7
+        signal = preferred_residue + 7 * rng.uniform(0.1, 0.9, size=n_signal)
+        # Mix them in
+        base[:n_signal] = signal
+
     analyzer = TauLepton17Analyzer()
-    analyzer.analyze(synthetic, label="synthetic_tau_smoke")
+    results = analyzer.analyze(base, label="synthetic_tau_realistic")
     print(analyzer.summary())
+
+    print("\n--- Residue fractions ---")
+    for i, f in enumerate(results["residue_mod7"]["fractions"]):
+        print(f"  residue {i}: {f:.4f}")
