@@ -10,6 +10,8 @@ from __future__ import annotations
 import curses
 
 from tav_shared.llm_analysis import append_llm_entry_fields
+from tav_shared.clear_cache import CLEAR_CACHE_MENU_LABEL
+from tav_shared.clear_cache_menu import run_clear_cache_menu
 from tav_shared.test_set_reset import (
     RESET_MENU_LABEL,
     confirm_reset,
@@ -106,6 +108,9 @@ def main_curses(stdscr):
                 continue
             if selection == NAV_BACK:
                 go_back()
+                continue
+            if selection == CLEAR_CACHE_MENU_LABEL:
+                run_clear_cache_menu(stdscr)
                 continue
             if selection == GATEWAY_GUI_MENU_LABEL:
                 already_running = is_gateway_running()
@@ -215,6 +220,8 @@ def main_curses(stdscr):
                 hook = handle_module_pre_form(module_tag, stdscr, selection, params)
                 if hook == "continue":
                     continue
+                if hook == "skip_form":
+                    return module_tag, selection, params
 
                 fields = module_entry_fields(module_tag, selection)
                 fields = strip_auto_filled_fields(fields, params)

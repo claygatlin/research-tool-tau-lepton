@@ -30,6 +30,7 @@ from scipy.stats import chi2, norm
 
 from menus.particle.casimir.scanner import (
     ARTIFACTS_DIR,
+    DATASETS_DIR,
     _auto_select_columns,
     generate_mock_casimir_data,
     load_data,
@@ -42,6 +43,11 @@ from menus.particle.casimir.v_ppr import (
 
 TSB_TEST_RESULTS_DIR = ARTIFACTS_DIR / "tsb_test_results"
 TSB_EVIDENCE_ALPHA = 0.05
+
+FALSIFICATION_FIXTURE_DIR = DATASETS_DIR / "fixtures"
+FALSIFICATION_FIXTURE_CSV = FALSIFICATION_FIXTURE_DIR / "tsb_falsification_mock.csv"
+FALSIFICATION_FIXTURE_PARAM_COL = "magnetic_field_mT"
+FALSIFICATION_FIXTURE_VALUE_COL = "force_pN"
 
 
 def _utc_stamp() -> str:
@@ -362,6 +368,34 @@ def _save_falsification_plot(
     fig.savefig(out, dpi=150)
     plt.close(fig)
     return out
+
+
+def ensure_falsification_fixture_csv(*, force: bool = False) -> Path:
+    """
+    Write (or reuse) a synthetic Casimir sweep CSV for the falsification suite.
+
+    The file lives under datasets/casimir/fixtures/ and is auto-injected by the
+    menu pre-form hook so no manual path entry is required.
+    """
+    FALSIFICATION_FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+    if FALSIFICATION_FIXTURE_CSV.is_file() and not force:
+        return FALSIFICATION_FIXTURE_CSV
+    df = generate_mock_casimir_data()
+    df.to_csv(FALSIFICATION_FIXTURE_CSV, index=False)
+    print(f"[TAV ENGINE] Falsification fixture CSV: {FALSIFICATION_FIXTURE_CSV}")
+    return FALSIFICATION_FIXTURE_CSV
+
+
+def falsification_default_options() -> dict[str, str]:
+    """Menu/runner defaults after auto-generating the falsification fixture CSV."""
+    path = ensure_falsification_fixture_csv()
+    return {
+        "local_csv": str(path),
+        "param_col": FALSIFICATION_FIXTURE_PARAM_COL,
+        "value_col": FALSIFICATION_FIXTURE_VALUE_COL,
+        "output_prefix": "tsb_falsification",
+        "show_graphics": "popup",
+    }
 
 
 def run_falsification_from_source(

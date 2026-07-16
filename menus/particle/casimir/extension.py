@@ -81,6 +81,17 @@ def _yes(value: str) -> bool:
     return str(value or "").strip().lower() in {"yes", "y", "true", "1"}
 
 
+def handle_pre_form(stdscr, selection: str, params: dict[str, str]) -> str | None:
+    """Auto-generate falsification fixture CSV and skip the entry form."""
+    _ = stdscr
+    if selection != "TSB Falsification Test Suite (5 predictions)":
+        return None
+    from menus.particle.casimir.test_framework import falsification_default_options
+
+    params.update(falsification_default_options())
+    return "skip_form"
+
+
 def _show_saved_plot(plot_path: str | None) -> None:
     if not plot_path or not Path(plot_path).is_file():
         return
@@ -193,18 +204,7 @@ def entry_fields(action: str) -> list[dict]:
     if action == "Scan Local CSV":
         return [f for f in fields if f["key"] != "confirm_large_download"]
     if action == "TSB Falsification Test Suite (5 predictions)":
-        return [
-            f
-            for f in fields
-            if f["key"]
-            in {
-                "local_csv",
-                "param_col",
-                "value_col",
-                "output_prefix",
-                "show_graphics",
-            }
-        ]
+        return []
     return fields
 
 
@@ -217,7 +217,7 @@ def entry_instructions(action: str) -> list[str]:
         return [
             "Five explicit TSB vs Lifshitz falsification tests with p-values.",
             "Predictions: discrete steps, hysteresis, log-Δn modulations, anisotropy, 1/7 periodicity.",
-            "Blank local_csv → synthetic mock; or point to CSV / cached GitHub magnetic-fluid file.",
+            "Fixture CSV auto-generated at datasets/casimir/fixtures/tsb_falsification_mock.csv.",
             "Outputs: artifacts/tsb_test_results/*_report.json, *_summary.txt, six-panel PNG.",
             "Complements the broader tau-resonance scan (periodogram, ruptures, tav-resonance cross-check).",
         ]

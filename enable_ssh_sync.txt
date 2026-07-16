@@ -1,0 +1,130 @@
+Enable SSH / SFTP / rsync Remote Archive Sync
+=============================================
+
+Remote SSH host updates are DISABLED in code (July 2026). The research tool
+still stages finished datasets locally under:
+
+  scripts/research_tool/.tav_project_staging/
+    finishedA/   — SPARC, FRB CSV archives
+    finished2/   — Planck / integrator FITS
+    finished/    — general finished exports
+
+To push those archives to a remote host again, uncomment the marked blocks in
+the files below (search for "disabled" or "Remote SSH").
+
+
+1) Research tool — primary switch
+---------------------------------
+File: scripts/research_tool/tav_shared/tav_project_paths.py
+
+  a) remote_transfer_enabled()
+     Uncomment the os.environ.get("TAV_REMOTE_TRANSFER", ...) return.
+     Remove or comment out the hard-coded `return False`.
+
+  b) ensure_tav_project_dirs()
+     Uncomment the block that calls rt.sftp_mkdir_p() for finishedA/finished2/finished.
+
+  c) push_to_remote_public()
+     Uncomment the SFTP upload body (remove the early `return None`).
+
+  d) move_to_finished_archive()
+     Uncomment the try/except block that calls push_to_remote_public().
+
+  e) sync_staging_tree_to_remote()
+     Uncomment the rsync body (remove the early skipped return).
+
+
+2) Low-level SSH / SCP / rsync helpers
+--------------------------------------
+File: scripts/remote_transfer.py  (relative to Research root)
+
+  Uncomment the original bodies of:
+    - ssh_run()
+    - sftp_mkdir_p()
+    - sftp_put_file()
+    - sftp_put_tree()
+    - sftp_get_file()
+    - rsync_to_remote()
+    - __main__ connectivity test (optional)
+
+  Remove the early "remote SSH updates disabled" TransferResult returns.
+
+
+3) Corpus + staging batch sync (Python API)
+-------------------------------------------
+File: scripts/sync_archive.py
+
+  Uncomment:
+    - run_sync()          — runs sync_archive.sh
+    - push_file_to_public()
+    - push_corpus()
+    - push_staging()
+
+  Remove the early skipped-return stubs at the top of each function.
+
+
+4) Corpus + staging batch sync (shell)
+--------------------------------------
+File: scripts/sync_archive.sh
+
+  Remove or comment out these two lines at the top of the active section:
+    echo "$(date): Remote SSH/rsync sync disabled; skipping." >> "$LOG_FILE"
+    exit 0
+
+  Uncomment the full block labeled:
+    "--- Remote SSH/rsync blocks disabled below ---"
+
+
+5) Environment variables (required when enabled)
+----------------------------------------------
+Set before running the research tool, gateway /sync, or sync_archive:
+
+  export TAV_REMOTE_USER="<ssh_user>"
+  export TAV_REMOTE_HOST="<host_or_ip>"
+  export TAV_REMOTE_PUBLIC="<remote_public_root>"          # e.g. /home/user/Public
+  export TAV_REMOTE_TAV_PROJECT="<remote>/ProtonDrive/tav_project"
+  export TAV_REMOTE_TSB_SYNC="<remote_public>/tsb_sync"
+  export TAV_REMOTE_TRANSFER=1
+
+Optional:
+  export TAV_SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=15"
+  export TAV_SYNC_LOG="/path/to/sync.log"
+  export TAV_STAGING="/path/to/research_tool/.tav_project_staging"
+
+
+6) How to verify
+----------------
+From Research root:
+
+  python3 scripts/remote_transfer.py          # SSH echo + remote ls (if __main__ restored)
+  python3 scripts/sync_archive.py             # full corpus + staging sync
+  ./scripts/llm  then  /sync                  # gateway sync command
+
+From research_tool after a dataset fetch that archives to finishedA/finished2,
+look for log lines:
+  [TAV ENGINE] SFTP → user@host:...
+  [TAV ENGINE] Uploaded <file> to remote Public archive
+
+
+7) Call sites (no edits needed if sections 1–4 are restored)
+------------------------------------------------------------
+These import tav_project_paths helpers automatically:
+  - menus/particle/cern/fetcher.py
+  - menus/astronomical/sparc/fetcher.py
+  - menus/astronomical/frb/fetcher.py
+  - menus/integrator/fetcher.py
+  - menus/planck_cmb/tav.py
+  - menus/gravitic/ligo/fetcher.py
+  - menus/gravitic/lisa/fetcher.py
+  - tav_shared/dataset_registry.py
+
+Gateway entry:
+  - scripts/gateway.py  →  _cmd_sync()  →  sync_archive.run_sync()
+
+
+8) Re-disable later
+-------------------
+Reverse the steps: comment out remote bodies, restore `return False` in
+remote_transfer_enabled(), and restore the early-exit stub in sync_archive.sh.
+
+See also: scripts/research_tool/README.md  (section "Remote archive transfer")

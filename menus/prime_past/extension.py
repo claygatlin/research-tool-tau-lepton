@@ -202,10 +202,10 @@ def entry_fields(action: str) -> list[dict]:
 def entry_instructions(action: str) -> list[str]:
     """Short help bullets shown above the Prime Past entry form."""
     base = [
-        "No external data pull required — uses built-in domain/octonion model.",
+        "Harmonic / verification actions use the built-in domain/octonion model.",
+        "BBN confrontation scans auto-fetch empirical: targets pre-run (see action notes).",
         "Outputs: PNG plots + .tex appendix under artifacts/ (auto-created).",
         "MC samples: positive integer (e.g. 3000); used by Monte-Carlo / Full Demo.",
-        "URLs/files: not accepted on this form; empirical pulls use other menus.",
     ]
     if action == "BBN Interference Scan":
         base.extend(
@@ -213,6 +213,19 @@ def entry_instructions(action: str) -> list[str]:
                 "Evolves post-freeze-out BBN (T: 0.8 → 0.01 MeV) with Tav H(T) interference.",
                 "Compares ^4He mass fraction and ^7Li/H to curated Planck/Spite observations.",
                 "Report: artifacts/prime_past/bbn_interference_*.json",
+            ]
+        )
+    if action in {
+        "BBN Interference Scan",
+        "BBN Confrontation Scan",
+        "Enhanced BBN Confrontation",
+        "Final BBN Confrontation Tool",
+    }:
+        base.extend(
+            [
+                "Pre-run auto-fetch: empirical:bbn_abundances + empirical:neutron_lifetime "
+                "(pull→cache under datasets/empirical/).",
+                "Provenance logged in JSON reports as empirical_provenance.",
             ]
         )
     if action == "BBN Confrontation Scan":
@@ -278,6 +291,9 @@ def run_action(
         }
         comparison = run_bbn_comparison(options, verbose=True)
         confront_empirical_abundances(comparison, plot=plot_emp and show_plots, verbose=True)
+        prov = options.get("_empirical_provenance")
+        if prov:
+            comparison["empirical_provenance"] = prov
         return save_bbn_report(comparison)
 
     if action == "bbn_confrontation":
@@ -293,7 +309,12 @@ def run_action(
             plot=do_plot and show_plots,
             show_plot=show_plots,
         )
-        return save_scan_report(results_list, best, also_cwd=False)
+        return save_scan_report(
+            results_list,
+            best,
+            also_cwd=False,
+            empirical_provenance=options.get("_empirical_provenance"),
+        )
 
     if action == "bbn_enhanced":
         from menus.prime_past.bbn_enhanced import (
@@ -318,7 +339,11 @@ def run_action(
             verbose=True,
         )
         heatmap = plot_lithium_tension_heatmap(scan_results, show=show_plots)
-        return save_enhanced_scan(scan_results, heatmap_path=heatmap)
+        return save_enhanced_scan(
+            scan_results,
+            heatmap_path=heatmap,
+            empirical_provenance=options.get("_empirical_provenance"),
+        )
 
     if action == "bbn_final":
         from menus.prime_past.bbn_enhanced import (
@@ -337,6 +362,7 @@ def run_action(
             delta_k_wind=float(options.get("delta_k_wind") or 0.469),
             verbose=True,
             show_plots=show_plots,
+            empirical_provenance=options.get("_empirical_provenance"),
         )
         return outputs.get("best_config_path")
 

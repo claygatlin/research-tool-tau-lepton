@@ -2,9 +2,8 @@
 Processed-dataset archive paths for the Tav research tool.
 
 Local machine keeps a staging mirror under the research_tool tree.
-Finished archives are transferred via SFTP/SCP to:
-
-  willieb@10.0.0.183:/home/willieb/Public/ProtonDrive/tav_project/
+Finished archives can be transferred via SFTP/SCP to a configured remote host
+when enabled.
 
 Override with env: TAV_REMOTE_USER, TAV_REMOTE_HOST, TAV_REMOTE_PUBLIC,
 TAV_REMOTE_TAV_PROJECT. Set TAV_REMOTE_TRANSFER=0 to skip remote push
@@ -50,12 +49,14 @@ def _scripts_on_path() -> None:
 
 
 def remote_transfer_enabled() -> bool:
-    return os.environ.get("TAV_REMOTE_TRANSFER", "1").strip() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
+    # Remote SSH host updates disabled — local staging only.
+    return False
+    # return os.environ.get("TAV_REMOTE_TRANSFER", "1").strip() not in (
+    #     "0",
+    #     "false",
+    #     "no",
+    #     "off",
+    # )
 
 
 def _remote():
@@ -70,20 +71,21 @@ def ensure_tav_project_dirs() -> None:
     for path in (TAV_PROJECT_DIR, FINISHED_A_DIR, FINISHED2_DIR, FINISHED_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
-    if not remote_transfer_enabled():
-        return
-    try:
-        rt = _remote()
-        for sub in ("finishedA", "finished2", "finished"):
-            remote_dir = rt.remote_tav_subdir(sub)
-            result = rt.sftp_mkdir_p(remote_dir)
-            if not result.ok:
-                print(
-                    f"[TAV ENGINE] Warning: could not create remote {remote_dir}: "
-                    f"{result.stderr or result.stdout}"
-                )
-    except Exception as e:
-        print(f"[TAV ENGINE] Warning: remote mkdir skipped ({e})")
+    # Remote SSH mkdir disabled — local staging dirs only.
+    # if not remote_transfer_enabled():
+    #     return
+    # try:
+    #     rt = _remote()
+    #     for sub in ("finishedA", "finished2", "finished"):
+    #         remote_dir = rt.remote_tav_subdir(sub)
+    #         result = rt.sftp_mkdir_p(remote_dir)
+    #         if not result.ok:
+    #             print(
+    #                 f"[TAV ENGINE] Warning: could not create remote {remote_dir}: "
+    #                 f"{result.stderr or result.stdout}"
+    #             )
+    # except Exception as e:
+    #     print(f"[TAV ENGINE] Warning: remote mkdir skipped ({e})")
 
 
 def finished_a_search_dirs() -> tuple[Path, ...]:
@@ -188,28 +190,30 @@ def push_to_remote_public(
     archive_dir: Path | str,
 ) -> str | None:
     """
-    SFTP/SCP one staged archive file to willieb@host:/home/willieb/Public/...
+    SFTP/SCP one staged archive file to a configured remote archive path.
 
     Returns remote path on success, None if remote transfer disabled.
     Raises RuntimeError on hard failure when transfer is enabled.
     """
-    if not remote_transfer_enabled():
-        return None
-
-    local_file = Path(local_file)
-    archive_dir = Path(archive_dir)
-    rt = _remote()
-    sub = _subdir_name(archive_dir)
-    remote_path = rt.remote_tav_subdir(sub, local_file.name)
-    print(f"[TAV ENGINE] SFTP → {rt.remote_spec()}:{remote_path}")
-    result = rt.sftp_put_file(local_file, remote_path)
-    if not result.ok:
-        raise RuntimeError(
-            f"SFTP upload failed for {local_file.name}: "
-            f"{result.stderr or result.stdout or result.command}"
-        )
-    print(f"[TAV ENGINE] Uploaded {local_file.name} to remote Public archive")
-    return remote_path
+    # Remote SSH/SFTP upload disabled.
+    return None
+    # if not remote_transfer_enabled():
+    #     return None
+    #
+    # local_file = Path(local_file)
+    # archive_dir = Path(archive_dir)
+    # rt = _remote()
+    # sub = _subdir_name(archive_dir)
+    # remote_path = rt.remote_tav_subdir(sub, local_file.name)
+    # print(f"[TAV ENGINE] SFTP → {rt.remote_spec()}:{remote_path}")
+    # result = rt.sftp_put_file(local_file, remote_path)
+    # if not result.ok:
+    #     raise RuntimeError(
+    #         f"SFTP upload failed for {local_file.name}: "
+    #         f"{result.stderr or result.stdout or result.command}"
+    #     )
+    # print(f"[TAV ENGINE] Uploaded {local_file.name} to remote Public archive")
+    # return remote_path
 
 
 def move_to_finished_archive(
@@ -219,36 +223,36 @@ def move_to_finished_archive(
     also_search: tuple[Path, ...] = (),
 ) -> Path:
     """
-    Move ``src`` into local staging finished folder, then SFTP to remote Public.
-
-    Remote target:
-      willieb@10.0.0.183:/home/willieb/Public/ProtonDrive/tav_project/<finished*>/
+    Move ``src`` into local staging finished folder, then upload to a configured
+    remote archive path when transfer is enabled.
     """
     src = Path(src)
     dest = archive_destination(src, archive_dir, also_search=also_search)
     shutil.move(str(src), str(dest))
-    try:
-        push_to_remote_public(dest, archive_dir)
-    except Exception as e:
-        # Keep local copy; surface warning so runs are not lost offline
-        print(f"[TAV ENGINE] Warning: remote Public transfer failed: {e}")
-        print(f"[TAV ENGINE] File remains in local staging: {dest}")
+    # Remote SSH push disabled — archive stays in local staging only.
+    # try:
+    #     push_to_remote_public(dest, archive_dir)
+    # except Exception as e:
+    #     print(f"[TAV ENGINE] Warning: remote Public transfer failed: {e}")
+    #     print(f"[TAV ENGINE] File remains in local staging: {dest}")
     return dest
 
 
 def sync_staging_tree_to_remote() -> dict:
     """
-    Push entire local staging tree to remote Public tav_project (rsync over ssh).
+    Push the local staging tree to a configured remote archive target (rsync over ssh).
     """
-    if not remote_transfer_enabled():
-        return {"ok": False, "error": "TAV_REMOTE_TRANSFER disabled"}
-    ensure_tav_project_dirs()
-    rt = _remote()
-    result = rt.rsync_to_remote(TAV_PROJECT_DIR, rt.REMOTE_TAV_PROJECT)
-    return {
-        "ok": result.ok,
-        "remote": result.remote_path,
-        "stderr": result.stderr,
-        "stdout": result.stdout,
-        "returncode": result.returncode,
-    }
+    # Remote SSH rsync disabled.
+    return {"ok": True, "skipped": True, "reason": "remote SSH updates disabled"}
+    # if not remote_transfer_enabled():
+    #     return {"ok": False, "error": "TAV_REMOTE_TRANSFER disabled"}
+    # ensure_tav_project_dirs()
+    # rt = _remote()
+    # result = rt.rsync_to_remote(TAV_PROJECT_DIR, rt.REMOTE_TAV_PROJECT)
+    # return {
+    #     "ok": result.ok,
+    #     "remote": result.remote_path,
+    #     "stderr": result.stderr,
+    #     "stdout": result.stdout,
+    #     "returncode": result.returncode,
+    # }

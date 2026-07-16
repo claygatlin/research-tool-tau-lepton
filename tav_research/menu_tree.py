@@ -19,6 +19,7 @@ from tav_research.dataset_manager import (
     DATASET_MANAGER_TITLE,
     DATASET_RUN_ACTION,
 )
+from tav_shared.clear_cache import CLEAR_CACHE_MENU_LABEL
 from tav_research.gateway_launcher import GATEWAY_GUI_MENU_LABEL
 from tav_research.registry import MODULE_EXTENSIONS
 from tav_research import registry
@@ -42,6 +43,7 @@ def build_menu_tree():
     if registry.integrator_extension is not None:
         domains.append(registry.integrator_extension.SUBMENU_TITLE)
     domains.append(DATASET_MANAGER_TITLE)
+    domains.append(CLEAR_CACHE_MENU_LABEL)
     domains.append("Exit")
 
     submenus = {
@@ -60,6 +62,10 @@ def build_menu_tree():
     if registry.tav_resonance_extension is not None:
         submenus[registry.tav_resonance_extension.SUBMENU_TITLE] = append_reset_option(
             list(registry.tav_resonance_extension.MENU_ACTIONS)
+        )
+    if registry.berard_framework_extension is not None:
+        submenus[registry.berard_framework_extension.SUBMENU_TITLE] = append_reset_option(
+            list(registry.berard_framework_extension.MENU_ACTIONS)
         )
     if registry.tsb_casimir_extension is not None:
         submenus[registry.tsb_casimir_extension.SUBMENU_TITLE] = append_reset_option(
@@ -102,6 +108,11 @@ def build_menu_tree():
             *(
                 [registry.tau_sb_desi_extension.SUBMENU_TITLE]
                 if registry.tau_sb_desi_extension is not None
+                else []
+            ),
+            *(
+                [registry.berard_framework_extension.SUBMENU_TITLE]
+                if registry.berard_framework_extension is not None
                 else []
             ),
             "HALOGAS (HI Data Cubes)",

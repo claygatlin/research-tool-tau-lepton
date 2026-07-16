@@ -255,18 +255,21 @@ def _comparison_verdict(
     chi2_delta: float,
     data_sigma: float,
     mc_sigma: float,
+    mc_role: str | None = None,
 ) -> str:
+    if mc_role == "dedicated_signal":
+        return "EXPLORATORY_PROCESS_MISMATCH (signal MC vs inclusive dimuon data)"
     if abs(pt_delta) > 1.5:
-        return "MC_SHAPE_MISMATCH (pT subharmonic)"
+        return "EXPLORATORY_SHAPE_DIFFERENCE (pT subharmonic)"
     if abs(chi2_delta) > 10.0:
-        return "MC_SHAPE_MISMATCH (mod-7 multiplicity)"
+        return "EXPLORATORY_SHAPE_DIFFERENCE (mod-7 multiplicity)"
     if mc_sigma > 8.0 and data_sigma < 3.0:
-        return "MC_ARTIFACT_STRONGER_THAN_DATA"
+        return "EXPLORATORY_ENGINE_SCORE_ASYMMETRY"
     if data_sigma > 8.0 and mc_sigma < 3.0:
-        return "DATA_7FOLD_NOT_REPRODUCED_BY_MC"
+        return "EXPLORATORY_ENGINE_SCORE_ASYMMETRY"
     if data_sigma > 5.0 and mc_sigma > 5.0:
-        return "BOTH_SHOW_7FOLD (check physics interpretation)"
-    return "MC_CONSISTENT_WITH_DATA"
+        return "EXPLORATORY_BOTH_ELEVATED (engine scores — not HEP significance)"
+    return "EXPLORATORY_CONSISTENT"
 
 
 def _save_comparison_plot(
@@ -398,13 +401,40 @@ def tav_compare_data_mc(
     data_sigma = float(data_sp.get("significance_sigma") or 0.0)
     mc_sigma = float(mc_sp.get("significance_sigma") or 0.0)
 
+    from menus.particle.cms.hep_statistics import (
+        classify_mc_sample_label,
+        mc_normalization_metadata,
+        exploratory_classification_label,
+    )
+
+    mc_path = str(mc_results.get("file_path") or "")
+    mc_meta = classify_mc_sample_label(mc_path)
+    n_data = int(data_results.get("n_events") or data_results.get("n_events_processed") or 0)
+    n_mc = int(mc_results.get("n_events") or mc_results.get("n_events_processed") or 0)
+    norm_meta = mc_normalization_metadata(n_data, n_mc)
+
     pt_delta = data_sub - mc_sub
     chi2_delta = data_chi2 - mc_chi2
+
+    from tav_shared.dataset_comparison.pipeline import (
+        compare_aggregate_metrics,
+        compare_histogram_pair,
+    )
+    from tav_shared.dataset_comparison.tolerance import tolerant_diff
+
+    data_hist = np.asarray(_pt_histogram(data_results, lepton_key), dtype=float)
+    mc_hist = np.asarray(_pt_histogram(mc_results, lepton_key), dtype=float)
+    scan_data = data_results.get("scan_summary") or {}
+    scan_mc = mc_results.get("scan_summary") or {}
+    bin_edges_raw = scan_data.get("bin_edges") or scan_mc.get("bin_edges")
+    bin_edges = np.asarray(bin_edges_raw, dtype=float) if bin_edges_raw is not None else None
+
     verdict = _comparison_verdict(
         pt_delta=pt_delta,
         chi2_delta=chi2_delta,
         data_sigma=data_sigma,
         mc_sigma=mc_sigma,
+        mc_role=mc_meta.get("mc_role"),
     )
 
     prefix = (output_dir or "tav_mc_validation").strip()
@@ -428,12 +458,37 @@ def tav_compare_data_mc(
         "chi2_mod7_delta": chi2_delta,
         "data_significance_sigma": data_sigma,
         "mc_significance_sigma": mc_sigma,
-        "mc_strong_7fold": mc_sigma > 5.0,
-        "data_strong_7fold": data_sigma > 5.0,
+        "data_engine_score_sigma_raw": (data_sp.get("engine_score_sigma_raw")),
+        "mc_engine_score_sigma_raw": (mc_sp.get("engine_score_sigma_raw")),
+        "engine_score_capped": bool(data_sp.get("engine_score_capped") or mc_sp.get("engine_score_capped")),
+        "interpretation_label": data_sp.get("interpretation_label")
+        or "internal_engine_score_not_hep_significance",
+        "exploratory_classification": exploratory_classification_label(),
+        "mc_sample_metadata": mc_meta,
+        "normalization_metadata": norm_meta,
+        "mc_strong_7fold": False,
+        "data_strong_7fold": False,
         "verdict": verdict,
         "data_mod7_fractions": data_mult.get("mod7_fractions"),
         "mc_mod7_fractions": mc_mult.get("mod7_fractions"),
     }
+
+    if data_hist.size and mc_hist.size:
+        comparison["pt_histogram_comparison"] = compare_histogram_pair(
+            data_hist,
+            mc_hist,
+            bin_edges=bin_edges,
+        )
+    comparison["tolerant_metric_comparison"] = compare_aggregate_metrics(
+        {"subharmonic_excess": data_sub, "chi2_mod7": data_chi2},
+        {"subharmonic_excess": mc_sub, "chi2_mod7": mc_chi2},
+        tolerance_map={
+            "subharmonic_excess": "amplitude",
+            "chi2_mod7": "chi2",
+        },
+    ).as_dict()
+    comparison["pt_delta_tolerant"] = tolerant_diff(data_sub, mc_sub, label="amplitude")
+    comparison["chi2_delta_tolerant"] = tolerant_diff(data_chi2, mc_chi2, label="chi2")
 
     if save_plots:
         plot_path = artifact_path(
@@ -478,7 +533,12 @@ def tav_compare_data_mc(
         print(f"  Lepton          : {lepton_key}")
         print(f"  Δ subharmonic   : {pt_delta:.3f}")
         print(f"  Δ χ² mod-7      : {chi2_delta:.3f}")
-        print(f"  Data σ / MC σ   : {data_sigma:.2f} / {mc_sigma:.2f}")
+        print(
+            f"  Engine score    : {data_sigma:.2f} / {mc_sigma:.2f} "
+            f"(internal — not HEP significance)"
+        )
+        if mc_meta.get("warning"):
+            print(f"  MC warning      : {mc_meta['warning']}")
         print(f"  Verdict         : {verdict}")
         if comparison.get("plot_path"):
             print(f"  Plot            : {comparison['plot_path']}")

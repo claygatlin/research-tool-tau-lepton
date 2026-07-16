@@ -16,6 +16,11 @@ from tav_research.data_pull_common import (
     iter_resumable_batch_lines,
     standard_entry_fields,
 )
+from tav_shared.ingestion import (
+    DATA_MANAGER_LEGACY_PARAM_KEY,
+    DATA_MANAGER_PARAM_KEY,
+    inject_data_manager,
+)
 
 from menus.astronomical.halogas import data_pull as halogas_pull
 from menus.gravitic.ligo import data_pull as ligo_pull
@@ -67,10 +72,15 @@ def data_pull_entry_fields(source: str) -> list[dict]:
 
 
 def fetch_and_graph(repo: str, query: str, params: dict[str, Any] | None = None) -> None:
-    params = params or {}
+    params = inject_data_manager(params or {})
     print(f"\n[TAV ENGINE] Initiating fetch for: {query} in {repo}...")
     if params:
-        print(f"[TAV ENGINE] Entry parameters: {params}")
+        display_params = {
+            key: val
+            for key, val in params.items()
+            if key not in {DATA_MANAGER_PARAM_KEY, DATA_MANAGER_LEGACY_PARAM_KEY}
+        }
+        print(f"[TAV ENGINE] Entry parameters: {display_params}")
 
     batch_file = (params.get("batch_file") or "").strip()
     if batch_file and os.path.isfile(batch_file) and is_batch_list_file(batch_file):
@@ -79,7 +89,9 @@ def fetch_and_graph(repo: str, query: str, params: dict[str, Any] | None = None)
             fetch_and_graph(
                 repo,
                 batch_query,
-                {**params, "batch_file": "", "_record_batch_done": batch_query},
+                inject_data_manager(
+                    {**params, "batch_file": "", "_record_batch_done": batch_query}
+                ),
             )
         return
 

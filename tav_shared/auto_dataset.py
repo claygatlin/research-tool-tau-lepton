@@ -16,6 +16,10 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from tav_shared.dataset_registry import fetch_selected, get_provider
+from tav_shared.empirical_action_targets import (
+    empirical_keys_for_action,
+    ensure_empirical_targets,
+)
 
 # (module_tag, action) pairs that intentionally use synthetic data
 MOCK_ONLY_ACTIONS: set[tuple[str, str]] = {
@@ -82,6 +86,15 @@ def _register_ensures() -> None:
 
         return _ensure
 
+    def _empirical_module(module_tag: str) -> _ModuleEnsure:
+        def _ensure(action: str, options: dict[str, Any]) -> None:
+            keys = empirical_keys_for_action(module_tag, action)
+            if not keys:
+                return
+            ensure_empirical_targets(module_tag, action, options, verbose=True)
+
+        return _ensure
+
     def _cern(action: str, options: dict[str, Any]) -> None:
         if action == "Pull Datasets from Open Archives":
             return
@@ -108,6 +121,8 @@ def _register_ensures() -> None:
     _MODULE_ENSURES["FRB_COSMIC_WEB_TAV"] = _frb
     _MODULE_ENSURES["SPARC"] = _sparc
     _MODULE_ENSURES["CERN_OPENDATA"] = _cern
+    _MODULE_ENSURES["PRIME_PAST_HARMONIC"] = _empirical_module("PRIME_PAST_HARMONIC")
+    _MODULE_ENSURES["TSB_RESEARCH"] = _empirical_module("TSB_RESEARCH")
     for tag in ("EMPIRICAL_TESTS", "LHCB_TAV_ECHO", "TAV_DATA_INTEGRATOR", "PLANCK_CMB_TAV"):
         _MODULE_ENSURES[tag] = _registry(tag)
 
@@ -117,16 +132,13 @@ def _default_registry_targets(module_tag: str, action: str, options: dict[str, A
     if provider is None:
         return []
     remote = [t.id for t in provider.list_fetchable() if t.state.name in {"REMOTE", "ARCHIVED"}]
-    if module_tag == "EMPIRICAL_TESTS":
-        try:
-            from menus.empirical_tests.extension import _ACTION_CONFIG
-
-            sources = (_ACTION_CONFIG.get(action) or {}).get("sources") or []
-            if sources:
-                return [f"empirical:{key}" for key in sources]
-        except ImportError:
-            pass
-        return remote[:3] if remote else []
+    if module_tag in {"EMPIRICAL_TESTS", "PRIME_PAST_HARMONIC", "TSB_RESEARCH"}:
+        keys = empirical_keys_for_action(module_tag, action)
+        if keys:
+            return [f"empirical:{key}" for key in keys]
+        if module_tag == "EMPIRICAL_TESTS":
+            return remote[:3] if remote else []
+        return []
     if module_tag == "LHCB_TAV_ECHO":
         return [t.id for t in provider.list_fetchable() if "lhcb:" in t.id][:1]
     if module_tag == "CERN_OPENDATA":

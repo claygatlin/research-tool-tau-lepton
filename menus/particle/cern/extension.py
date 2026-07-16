@@ -27,6 +27,7 @@ MENU_ACTIONS = [
     "CMS 7-Fold Muon Tav Analysis",
     "CMS Full-Dataset 7-Fold Scan",
     "Run MC Validation Suite",
+    "Preregistered Recoil q_T Study (HEP Controls)",
     "Analyze ALICE ROOT Sample",
     "List Cached Datasets",
 ]
@@ -145,7 +146,10 @@ def entry_fields(action: str) -> list[dict]:
                 "choices": ["yes", "no"],
             },
         ]
-    if action == "Run MC Validation Suite":
+    if action in {
+        "Run MC Validation Suite",
+        "Preregistered Recoil q_T Study (HEP Controls)",
+    }:
         from menus.particle.cms.validation_extension import entry_fields as validation_entry_fields
 
         return validation_entry_fields(action)
@@ -206,10 +210,13 @@ def entry_instructions(action: str) -> list[str]:
         return [
             "Chunked uproot.iterate scan over entire NanoAOD file (61M+ events).",
             "Accumulates global Muon_pt histogram + per-event nMuon array.",
-            "Feeds tav_7fold_muon_analysis; reports seven_periodic.significance_sigma.",
+            "Feeds tav_7fold_muon_analysis; reports internal engine scores (not HEP significance).",
             "Default target: cms_nanoaod_dimu / Run2012BC_DoubleMuParked_Muons.root",
         ]
-    if action == "Run MC Validation Suite":
+    if action in {
+        "Run MC Validation Suite",
+        "Preregistered Recoil q_T Study (HEP Controls)",
+    }:
         from menus.particle.cms.validation_extension import entry_instructions as validation_entry_instructions
 
         return validation_entry_instructions(action)
@@ -257,7 +264,10 @@ def run_action(action: str, show_plots: bool = True, options: dict | None = None
             )
         return None
 
-    if action == "Run MC Validation Suite":
+    if action in {
+        "Run MC Validation Suite",
+        "Preregistered Recoil q_T Study (HEP Controls)",
+    }:
         try:
             from menus.particle.cms.validation_extension import run_action as run_validation_action
         except Exception as exc:
@@ -265,7 +275,7 @@ def run_action(action: str, show_plots: bool = True, options: dict | None = None
 
         report_path = run_validation_action(action, show_plots=show_plots, options=options)
         if report_path is not None:
-            print(f"[CERN OPENDATA] Validation report: {report_path}")
+            print(f"[CERN OPENDATA] Report: {report_path}")
         return report_path
 
     target = str(options.get("target") or ACTION_DEFAULT_TARGETS.get(action, ["cms_nanoaod_dimu"])[0])

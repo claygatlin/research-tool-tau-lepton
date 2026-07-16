@@ -30,6 +30,7 @@ REPO_ACTIONS = [
     "Evolve Cylinder State",
     "Run Residual Diagnostics",
     "Calibrate SoundHorizon",
+    "Fractal Tau Circle Likelihood",
     "Run Falsification Suite (Methods 1,4,9)",
 ]
 MENU_ACTIONS = REPO_ACTIONS
@@ -139,6 +140,94 @@ def entry_fields(action: str) -> list[dict]:
                 "hint": "Axial reference for Φ-anchored r_d",
             },
         ]
+    if action == "Fractal Tau Circle Likelihood":
+        return [
+            {
+                "key": "winding_density",
+                "label": "Winding density ρ_wind",
+                "default": "1.0",
+                "required": False,
+            },
+            {
+                "key": "fractal_level",
+                "label": "Fractal level (n_hier scale)",
+                "default": "45.8",
+                "required": False,
+            },
+            {
+                "key": "phase_slip_alpha",
+                "label": "Phase slip α",
+                "default": "0.33",
+                "required": False,
+            },
+            {
+                "key": "observed_mass_gap_mev",
+                "label": "Observed mass gap (MeV)",
+                "default": "313.1",
+                "required": False,
+                "hint": "313.1 MeV TEP geometric friction floor",
+            },
+            {
+                "key": "observed_spectral_dim",
+                "label": "Target spectral dim (CDT UV)",
+                "default": "2.0",
+                "required": False,
+            },
+            {
+                "key": "likelihood_mode",
+                "label": "Likelihood mode",
+                "default": "dual",
+                "required": False,
+                "choices": ["dual", "tep_ansatz"],
+                "hint": "tep_ansatz = torsion Dirac + TEP hard constraint",
+            },
+            {
+                "key": "sigma_qcd_mev",
+                "label": "σ_qcd (MeV, tep_ansatz)",
+                "default": "5.0",
+                "required": False,
+            },
+            {
+                "key": "do_grid_scan",
+                "label": "Run parameter grid scan",
+                "default": "yes",
+                "required": False,
+                "choices": ["yes", "no"],
+            },
+            {
+                "key": "do_mcmc",
+                "label": "Run TEP-hard MCMC (emcee)",
+                "default": "no",
+                "required": False,
+                "choices": ["yes", "no"],
+                "hint": "Morris sensitivity → freeze low-impact params; TEP in log_prior",
+            },
+            {
+                "key": "mcmc_walkers",
+                "label": "MCMC walkers",
+                "default": "32",
+                "required": False,
+            },
+            {
+                "key": "mcmc_steps",
+                "label": "MCMC steps per walker",
+                "default": "1000",
+                "required": False,
+            },
+            {
+                "key": "morris_trajectories",
+                "label": "Morris trajectories (313.1 MeV screen)",
+                "default": "24",
+                "required": False,
+            },
+            {
+                "key": "morris_freeze_threshold",
+                "label": "Morris μ* freeze threshold",
+                "default": "0.05",
+                "required": False,
+                "hint": "Parameters below μ* threshold are frozen at defaults",
+            },
+        ]
     if action == "Run Falsification Suite (Methods 1,4,9)":
         return [
             {
@@ -216,6 +305,15 @@ def entry_instructions(action: str) -> list[str]:
         "Calibrate SoundHorizon": [
             "Φ-anchored r_d calibration across γ = 7.95, 8.0, 8.8511, 12.0.",
             "Reports γ-swing reduction vs legacy compute_tsb_rd.",
+        ],
+        "Fractal Tau Circle Likelihood": [
+            "Pre-run auto-fetch: empirical:glueball_lattice + empirical:neutron_lifetime.",
+            "1D Fractal-Conformal Tau Circle: ρ_wind, fractal_level, phase_slip_alpha.",
+            "dual mode: rotation dynamics + CDT spectral_dim constraint.",
+            "tep_ansatz: m_tors·exp(−1.0607·fractal_level) vs 313.1 MeV floor; TEP closure required.",
+            "For tep_ansatz use fractal_level ≈ N_dom = 3 (not full n_hier=45.8).",
+            "TEP failure → log L = −∞; optional 3D grid scan.",
+            "MCMC: TEP + 142857 hard-coded in log_prior; Morris ranks params for 313.1 MeV floor.",
         ],
         "Run Falsification Suite (Methods 1,4,9)": [
             "Unified LSS falsification: S(n) nodes, P(k) comb, gridded mock recovery.",
@@ -330,6 +428,39 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
             verbose=True,
         )
         path = _save_report("calibrate_sound_horizon", report)
+        print(f"[TAV ENGINE] Report saved: {path}")
+        return
+
+    if selection == "Fractal Tau Circle Likelihood":
+        from menus.tsb_research.fractal_tau_circle import run_fractal_tau_likelihood
+
+        mode = str(options.get("likelihood_mode") or "dual").strip().lower()
+        report = run_fractal_tau_likelihood(
+            params={
+                "winding_density": _float_option(options, "winding_density", 1.0),
+                "fractal_level": _float_option(
+                    options,
+                    "fractal_level",
+                    3.0 if mode == "tep_ansatz" else 45.8,
+                ),
+                "phase_slip_alpha": _float_option(options, "phase_slip_alpha", 0.33),
+            },
+            observed_data={
+                "mass_gap_mev": _float_option(options, "observed_mass_gap_mev", 313.1),
+                "spectral_dim": _float_option(options, "observed_spectral_dim", 2.0),
+                "sigma_qcd_mev": _float_option(options, "sigma_qcd_mev", 5.0),
+                "likelihood_mode": mode,
+            },
+            do_grid_scan=_bool_option(options, "do_grid_scan", True),
+            do_mcmc=_bool_option(options, "do_mcmc", False),
+            mcmc_walkers=_int_option(options, "mcmc_walkers", 32),
+            mcmc_steps=_int_option(options, "mcmc_steps", 1000),
+            morris_trajectories=_int_option(options, "morris_trajectories", 24),
+            morris_freeze_threshold=_float_option(options, "morris_freeze_threshold", 0.05),
+            empirical_provenance=options.get("_empirical_provenance"),
+            verbose=True,
+        )
+        path = _save_report("fractal_tau_circle_likelihood", report)
         print(f"[TAV ENGINE] Report saved: {path}")
         return
 

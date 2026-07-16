@@ -13,6 +13,7 @@ import matplotlib
 from tav_shared.auto_dataset import ensure_datasets_before_run
 from tav_shared.run_output import capture_run_log
 from tav_shared.llm_analysis import run_post_action_llm_review
+from tav_shared.ingestion import inject_data_manager
 
 from tav_research.data_pull import fetch_and_graph, is_batch_list_file, _iter_resumable_batch_lines
 from tav_research.dataset_manager import DATASET_MANAGER_TAG, run_dataset_manager_action
@@ -84,7 +85,7 @@ def main() -> None:
     try:
         while True:
             repo, query, params = curses.wrapper(main_curses)
-            params = params or {}
+            params = inject_data_manager(params or {})
             if repo is None:
                 break
 
@@ -117,7 +118,9 @@ def main() -> None:
             elif repo and query:
                 if os.path.isfile(query) and is_batch_list_file(query):
                     for b_query in _iter_resumable_batch_lines(query, params):
-                        item_params = {**params, "_record_batch_done": b_query}
+                        item_params = inject_data_manager(
+                            {**params, "_record_batch_done": b_query}
+                        )
                         _run_with_optional_llm_review(
                             repo,
                             b_query,

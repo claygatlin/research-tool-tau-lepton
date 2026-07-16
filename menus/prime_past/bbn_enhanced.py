@@ -250,6 +250,7 @@ def save_enhanced_scan(
     scan_results: list[dict[str, Any]],
     *,
     heatmap_path: str | None = None,
+    empirical_provenance: dict[str, Any] | None = None,
     prefix: str = "enhanced_tav_bbn_scan",
 ) -> str:
     ensure_artifacts_dir()
@@ -265,6 +266,8 @@ def save_enhanced_scan(
         "empirical": fetch_empirical_data(verbose=False),
         "heatmap": heatmap_path,
     }
+    if empirical_provenance:
+        payload["empirical_provenance"] = empirical_provenance
     json_path.write_text(json.dumps(payload, indent=2, default=float) + "\n", encoding="utf-8")
     print(f"[TAV ENGINE] Enhanced scan JSON saved: {json_path}")
     return str(json_path)
@@ -391,6 +394,7 @@ def run_final_confrontation_tool(
     verbose: bool = True,
     save_comparison: bool = True,
     show_plots: bool = False,
+    empirical_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Full pipeline: scan → best config JSON → standard vs best comparison plot.
@@ -428,7 +432,11 @@ def run_final_confrontation_tool(
             show=show_plots,
         )
 
-    scan_json = save_enhanced_scan(scan_results, prefix="final_tav_bbn_scan")
+    scan_json = save_enhanced_scan(
+        scan_results,
+        prefix="final_tav_bbn_scan",
+        empirical_provenance=empirical_provenance,
+    )
     outputs["scan_json"] = scan_json
 
     if verbose:

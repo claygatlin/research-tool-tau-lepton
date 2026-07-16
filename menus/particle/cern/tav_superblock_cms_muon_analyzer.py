@@ -217,13 +217,14 @@ def _multiplicity_7fold(n_muon: np.ndarray) -> dict[str, Any]:
     if counts.size < 8:
         return {"n_events": int(counts.size), "verdict": "UNDERPOWERED", "detected": False}
 
-    mod_residues = mod7_phase_residues(counts, clip_max=32)
-    mod_hist = np.bincount(mod_residues, minlength=7).astype(float)
-    mod_hist /= max(mod_hist.sum(), 1.0)
+    from menus.particle.cms.hep_statistics import mod7_analysis_package
 
-    # Deviation from uniform mod-7 (null for Poisson-like multiplicity)
-    uniform = 1.0 / 7.0
-    chi2_mod7 = float(np.sum((mod_hist - uniform) ** 2 / uniform))
+    mod7_pack = mod7_analysis_package(np.rint(counts).astype(np.int64))
+    mod_hist = np.asarray(mod7_pack.get("mod7_histogram") or [0.0] * 7, dtype=float)
+    total = max(mod_hist.sum(), 1.0)
+    mod_frac = mod_hist / total
+    chi2_mod7 = float(mod7_pack.get("chi2_mod7_vs_uniform") or 0.0)
+    chi2_trigger = float(mod7_pack.get("chi2_mod7_vs_trigger_aware") or 0.0)
 
     # Cumulative multiplicity series (length n_events) for periodogram.
     # Downsample inside _periodogram_7fold for multi-million-event skims.
@@ -240,15 +241,14 @@ def _multiplicity_7fold(n_muon: np.ndarray) -> dict[str, Any]:
     spec["n_events_original"] = int(counts.size)
     if ds_meta.get("downsampled"):
         spec.update(ds_meta)
-    detected = chi2_mod7 > 14.0 or spec.get("detected", False)
+    mod_residues = mod7_phase_residues(counts, clip_max=32)
+    detected = spec.get("detected", False)
     verdict = (
-        "MULTIPLICITY 7-FOLD"
-        if detected and chi2_mod7 > 14.0
-        else "MULTIPLICITY PERIODOGRAM HINT"
-        if spec.get("detected")
+        "EXPLORATORY_PERIODOGRAM_HINT"
+        if detected
+        else "TRIGGER_BIAS_EXPECTED"
+        if float(mod_frac[2]) > 0.35
         else "INCONCLUSIVE"
-        if chi2_mod7 > 7.0
-        else "NO 7-FOLD MULTIPLICITY"
     )
 
     return {
@@ -256,8 +256,17 @@ def _multiplicity_7fold(n_muon: np.ndarray) -> dict[str, Any]:
         "mean_n_muon": float(np.mean(counts)),
         "max_n_muon": float(np.max(counts)),
         "mod7_residues": mod_residues.tolist(),
-        "mod7_fractions": mod_hist.tolist(),
+        "mod7_fractions": mod_frac.tolist(),
         "chi2_mod7_vs_uniform": chi2_mod7,
+        "chi2_mod7_vs_trigger_aware": chi2_trigger,
+        "trigger_aware_expected_fractions": mod7_pack.get(
+            "trigger_aware_expected_fractions"
+        ),
+        "null_hypothesis_warning": mod7_pack.get("null_hypothesis_warning"),
+        "recommended_null": mod7_pack.get("recommended_null"),
+        "exploratory_classification": (
+            "EXPLORATORY_PIPELINE_ANOMALY — not a discovery claim"
+        ),
         "cumulative_periodogram": spec,
         "detected": bool(detected),
         "verdict": verdict,
@@ -289,38 +298,44 @@ def _seven_periodic_summary(
     multiplicity: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """
-    Combined 7-periodic significance (σ) for menu / publication reporting.
+    Combined internal engine score for exploratory menu reporting.
 
-    Merges pT subharmonic excess and multiplicity mod-7 χ² into one scalar.
+    Not particle-physics significance — see hep_statistics.engine_score_from_components.
     """
-    sigmas: list[float] = []
+    from menus.particle.cms.hep_statistics import engine_score_from_components
+
+    components: list[float] = []
 
     sub_excess = float(muon_pt.get("subharmonic_excess") or 0.0)
     if sub_excess > 1.0:
-        sigmas.append(float(min(12.0, (sub_excess - 1.0) * 1.8)))
+        components.append(float((sub_excess - 1.0) * 1.8))
 
     n_hits = len(muon_pt.get("harmonic_hits") or [])
     if n_hits >= 2:
-        sigmas.append(float(min(12.0, 2.0 + 0.75 * n_hits)))
+        components.append(float(2.0 + 0.75 * n_hits))
 
     chi2_mod7 = None
+    chi2_trigger = None
     if multiplicity:
         chi2_mod7 = float(multiplicity.get("chi2_mod7_vs_uniform") or 0.0)
-        if chi2_mod7 > 7.0:
-            # 6 dof uniform-mod-7 null; one-sided excess p-value → Gaussian σ
-            p_tail = float(1.0 - chi2_dist.cdf(chi2_mod7, df=6))
+        chi2_trigger = float(multiplicity.get("chi2_mod7_vs_trigger_aware") or 0.0)
+        if chi2_trigger > 1.0:
+            p_tail = float(1.0 - chi2_dist.cdf(chi2_trigger, df=6))
             p_tail = max(p_tail, 1e-300)
             from scipy.stats import norm
 
-            sigmas.append(float(min(12.0, norm.isf(p_tail))))
+            components.append(float(norm.isf(p_tail)))
 
-    significance = float(max(sigmas)) if sigmas else 0.0
+    score = engine_score_from_components(components)
     return {
-        "significance_sigma": significance,
+        **score,
         "pt_subharmonic_excess": sub_excess,
         "pt_harmonic_hit_count": n_hits,
         "multiplicity_chi2_mod7": chi2_mod7,
-        "components_sigma": sigmas,
+        "multiplicity_chi2_mod7_trigger_aware": chi2_trigger,
+        "exploratory_classification": (
+            "EXPLORATORY_PIPELINE_ANOMALY — not a discovery claim"
+        ),
     }
 
 
@@ -572,7 +587,15 @@ def tav_7fold_muon_analysis(
         if multiplicity:
             print(f"  Multiplicity    : {multiplicity.get('verdict')}")
         print(f"  Global verdict  : {verdict}")
-        print(f"  7-periodic σ    : {seven_periodic.get('significance_sigma', 0):.2f}")
+        raw = seven_periodic.get("engine_score_sigma_raw")
+        capped = seven_periodic.get("significance_sigma", 0)
+        if raw is not None and float(raw) > float(capped) + 1e-9:
+            print(
+                f"  Engine score    : {capped:.2f} (raw {float(raw):.2f}, "
+                f"internal — not HEP significance)"
+            )
+        else:
+            print(f"  Engine score    : {capped:.2f} (internal — not HEP significance)")
         if result.get("report_chunked"):
             print(
                 f"  Report (chunked): {result['report_path']} "

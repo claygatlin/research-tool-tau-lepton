@@ -22,22 +22,13 @@ API keys: `config/api_keys.env` (see example) or the same env vars the gateway u
 (`XAI_API_KEY`, `NVIDIA_API_KEY` / `NV_API_KEY`, `OLLAMA_BASE_URL`, …).
 Gateway persistent memory (name, notes) is passed into the child process env.
 
-## Remote Public archive (SFTP)
+## Remote archive transfer
 
-Finished datasets are staged locally under `.tav_project_staging/`, then uploaded via
-SFTP/SCP to:
+Finished datasets are staged locally under `.tav_project_staging/` and can be copied to a configured remote host when enabled.
 
-```text
-willieb@10.0.0.183:/home/willieb/Public/ProtonDrive/tav_project/
-```
+Remote SSH host updates are **disabled in code** (local staging only).
 
-Corpus sync (`/sync` in the gateway, or `scripts/sync_archive.sh`) targets:
-
-```text
-willieb@10.0.0.183:/home/willieb/Public/tsb_sync/
-```
-
-Disable remote push: `export TAV_REMOTE_TRANSFER=0`.
+**To re-enable SSH/SFTP/rsync sync:** see [enable_ssh_sync.txt](enable_ssh_sync.txt) for file-by-file uncomment instructions, required environment variables, and verification steps.
 
 ## Features
 
@@ -88,6 +79,75 @@ config/                   # api_keys.env.example
 scripts/                  # Maintenance utilities
 ```
 
+## Empirical auto-fetch (`empirical:` targets)
+
+Before each run, `ensure_datasets_before_run` materializes curated empirical tables:
+
+| Module | Actions | Targets |
+|--------|---------|---------|
+| `PRIME_PAST_HARMONIC` | BBN Interference / Confrontation / Enhanced / Final | `empirical:bbn_abundances`, `empirical:neutron_lifetime` |
+| `TSB_RESEARCH` | Fractal Tau Circle Likelihood | `empirical:glueball_lattice`, `empirical:neutron_lifetime` |
+| `TSB_RESEARCH` | Residual Diagnostics, Calibrate SoundHorizon | `empirical:neutron_lifetime` |
+
+Config: `tav_shared/empirical_action_targets.py`. Provenance is stored on `options['_empirical_provenance']` and written into JSON reports.
+
+## Automated ingestion validation
+
+Pydantic-backed validation runs before data reaches Tau-Superblock solvers and `log_likelihood`:
+
+| Package | Role |
+|---------|------|
+| `tav_shared/ingestion/schemas.py` | CMS dimuon, BBN empirical, fractal-tau models |
+| `tav_shared/ingestion/normalize.py` | CSV / JSON / ROOT-derived dict → canonical internal format |
+| `tav_shared/ingestion/pipeline.py` | `IngestionValidationReport`, batch validators, anomaly filtering |
+| `tav_shared/ingestion/config.py` | Physical bounds; override via `TAV_INGESTION_CONFIG` JSON path |
+
+**Integrated entry points:** `extract_dimuon_kinematics_from_nanoaod`, `fetch_empirical_data` (BBN), `log_likelihood` / `log_likelihood_tep_ansatz` (fractal tau).
+
+## Standardized dataset comparison
+
+Apples-to-apples MC vs data and model vs observed checks during preprocessing:
+
+| Package | Role |
+|---------|------|
+| `tav_shared/dataset_comparison/scaling.py` | `StandardScaler`, `MinMaxScaler` (numpy, sklearn-compatible API) |
+| `tav_shared/dataset_comparison/keys.py` | Primary-key rounding, sort, inner-join alignment |
+| `tav_shared/dataset_comparison/tolerance.py` | `tolerant_diff`, `compare_mass_gap_mev` with configurable thresholds |
+| `tav_shared/dataset_comparison/pipeline.py` | `prepare_datasets_for_comparison`, `compare_histogram_pair`, reports |
+
+Override tolerances and scalers via `TAV_COMPARISON_CONFIG` JSON path.
+
+**Integrated entry points:** `tav_compare_data_mc`, `enhanced_data_vs_mc_comparison`, `normalize_dimuon_events` (key-sorted), `log_likelihood_breakdown` (model vs observed tolerance block).
+
+## MCMC validation (TEP + Morris)
+
+Fractal tau circle MCMC treats validation as a hard prior constraint:
+
+| Module | Role |
+|--------|------|
+| `menus/tsb_research/fractal_tau_mcmc.py` | `log_prior_fractal_tau`, `log_probability_fractal_tau`, `run_fractal_tau_mcmc` |
+| `menus/tsb_research/sensitivity.py` | Morris OAT screening, sensitivity-driven parameter freeze/narrow |
+| `menus/tsb_research/fractal_tau_circle.py` | `satisfies_tep_142857_cycle_closure`, `tep_closure_diagnostics` |
+
+**Menu:** TSB Research → **Fractal Tau Circle Likelihood** with `Run TEP-hard MCMC (emcee) = yes`.
+
+Morris screening ranks `winding_density`, `fractal_level`, and `phase_slip_alpha` by impact on the 313.1 MeV floor; low-μ* parameters are frozen before emcee sampling.
+
+## CMS dimuon validation (HEP controls)
+
+Critique-driven upgrades (2026-07-15) for DoubleMuParked / MC comparisons:
+
+| Module | Role |
+|--------|------|
+| `menus/particle/cms/hep_statistics.py` | Trigger-aware mod-7 null, labeled engine scores, MC role warnings, fine q_T binning |
+| `menus/particle/cms/preregistered_recoil_study.py` | Frozen q_T window (0.25–0.40 GeV), shuffle/partition null tests, split-sample stability |
+| `menus/particle/cms/validation_extension.py` | Menu: **Preregistered Recoil q_T Study (HEP Controls)** |
+
+**CERN Open Data → Preregistered Recoil q_T Study (HEP Controls)** runs the preregistered pipeline.
+**Run MC Validation Suite** now labels Higgs MC as dedicated signal (not inclusive SM background) and reports internal engine scores separately from particle-physics significance.
+
+Reference: `Personal_Files/cms_dimuon_critique_hep_controls_2026-07-15.md`
+
 ## CLI tools (BBN)
 
 | Script | Description |
@@ -112,8 +172,6 @@ cd /path/to/research_tool
 ./scripts/push_to_github.sh git@github.com:YOUR_USER/YOUR_REPO.git
 ```
 
-Finished archives for this project live on the remote host under
-`willieb@10.0.0.183:/home/willieb/Public/` (SFTP), not a local Public path.
 
 Or set the remote yourself:
 
@@ -123,5 +181,3 @@ git push -u origin main
 ```
 
 ## License
-
-Research code — see individual module headers and the `tav-resonance` package for library licensing.

@@ -228,8 +228,14 @@ def _build_specs() -> dict[str, TestSetResetSpec]:
         "PRIME_PAST_HARMONIC": TestSetResetSpec(
             module_tag="PRIME_PAST_HARMONIC",
             menu_titles=("Prime Past Harmonic (Down Quark / Isospin)",),
-            processed_prefixes=("prime_past:",),
+            processed_prefixes=("prime_past:", "empirical:"),
             log_slug="prime_past_harmonic",
+        ),
+        "TSB_RESEARCH": TestSetResetSpec(
+            module_tag="TSB_RESEARCH",
+            menu_titles=("Tau-Superblock Research Engine",),
+            processed_prefixes=("empirical:",),
+            log_slug="tsb_research",
         ),
         "EMPIRICAL_TESTS": TestSetResetSpec(
             module_tag="EMPIRICAL_TESTS",
@@ -250,6 +256,14 @@ for tag, spec in _SPECS.items():
 def resolve_module_tag(menu_title: str) -> str | None:
     """Map the current submenu/domain title to a module tag."""
     return _TITLE_TO_TAG.get(menu_title.strip())
+
+
+def processed_prefixes_for_tag(module_tag: str) -> tuple[str, ...]:
+    """Return processed-ledger ID prefixes owned by a module tag."""
+    spec = _SPECS.get(module_tag)
+    if spec is None:
+        return ()
+    return spec.processed_prefixes
 
 
 def append_reset_option(actions: list[str]) -> list[str]:

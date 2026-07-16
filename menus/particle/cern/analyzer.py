@@ -17,6 +17,8 @@ from menus.particle.cern.tav_superblock_cms_muon_analyzer import (
     tav_7fold_muon_analysis,
 )
 from tav_research.curses_shell import ChunkedScanProgress, optional_chunked_scan_progress
+from tav_shared.ingestion import get_runtime_data_manager
+from tav_shared.ingestion.pipeline import validate_and_normalize_cms_dimuon_batch
 
 
 PT_REDUCTION_FLATTEN = "flatten"
@@ -866,6 +868,7 @@ def extract_dimuon_kinematics_from_nanoaod(
         "delta_phi": [],
         "delta_r": [],
         "system_pt": [],
+        "n_muon_per_event": [],
         "n_true_int": [],
     }
     total_events = 0
@@ -913,6 +916,11 @@ def extract_dimuon_kinematics_from_nanoaod(
             chunk = _dimuon_kinematics_from_jagged(pt_batch, eta_batch, phi_batch)
             for key in ("leading_pt", "subleading_pt", "delta_phi", "delta_r", "system_pt"):
                 accum[key].extend(chunk[key].tolist())
+            n_in_chunk = int(chunk["leading_pt"].size)
+            if n_in_chunk:
+                accum["n_muon_per_event"].extend(
+                    n_muon[dimuon_mask][:n_in_chunk].astype(int).tolist()
+                )
             if pileup_branch and pileup_branch in batch:
                 ntrue = np.asarray(batch[pileup_branch], dtype=np.float64).ravel()[dimuon_mask]
                 n_in_chunk = int(chunk["leading_pt"].size)
@@ -921,11 +929,15 @@ def extract_dimuon_kinematics_from_nanoaod(
                         np.clip(np.rint(ntrue[:n_in_chunk]), 0, 100).astype(int).tolist()
                     )
 
-    merged = {
-        key: np.asarray(vals, dtype=float if key != "n_true_int" else int)
-        for key, vals in accum.items()
-    }
-    if merged["n_true_int"].size == 0:
+    merged: dict[str, Any] = {}
+    for key, vals in accum.items():
+        if not vals:
+            continue
+        if key in {"n_true_int", "n_muon_per_event"}:
+            merged[key] = np.asarray(vals, dtype=int)
+        else:
+            merged[key] = np.asarray(vals, dtype=float)
+    if merged.get("n_true_int", np.array([])).size == 0:
         merged.pop("n_true_int", None)
     n_dimuon = int(merged["leading_pt"].size)
     if verbose:
@@ -934,7 +946,7 @@ def extract_dimuon_kinematics_from_nanoaod(
             f"from {total_events:,} scanned"
         )
 
-    return {
+    raw_payload = {
         "path": str(path),
         "tree": tree_name,
         "n_entries_in_file": n_entries_in_file,
@@ -943,6 +955,23 @@ def extract_dimuon_kinematics_from_nanoaod(
         "n_dimuon_events": n_dimuon,
         **merged,
     }
+    validated, report = validate_and_normalize_cms_dimuon_batch(
+        raw_payload,
+        filter_anomalies=True,
+        strict=False,
+        return_columnar=True,
+        data_manager=get_runtime_data_manager(),
+    )
+    if validated:
+        raw_payload = validated
+    raw_payload["n_dimuon_events"] = report.n_accepted
+    raw_payload["ingestion_validation"] = report.as_dict()
+    if verbose and report.n_rejected:
+        print(
+            f"[CERN CMS] Ingestion validation: "
+            f"{report.n_accepted:,} accepted, {report.n_rejected:,} rejected"
+        )
+    return raw_payload
 
 
 def analyze_cms_nanoaod_full(

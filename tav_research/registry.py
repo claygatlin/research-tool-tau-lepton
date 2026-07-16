@@ -67,6 +67,14 @@ else:
     TAV_RESONANCE_IMPORT_ERROR = None
 
 try:
+    import menus.astronomical.berard.extension as berard_framework_extension
+except ImportError as _berard_import_error:
+    berard_framework_extension = None
+    BERARD_IMPORT_ERROR = _berard_import_error
+else:
+    BERARD_IMPORT_ERROR = None
+
+try:
     import menus.particle.casimir.extension as tsb_casimir_extension
 except ImportError as _casimir_import_error:
     tsb_casimir_extension = None
@@ -137,6 +145,8 @@ if tau_sb_desi_extension is not None:
     MODULE_EXTENSIONS[tau_sb_desi_extension.MODULE_TAG] = tau_sb_desi_extension
 if tav_resonance_extension is not None:
     MODULE_EXTENSIONS[tav_resonance_extension.MODULE_TAG] = tav_resonance_extension
+if berard_framework_extension is not None:
+    MODULE_EXTENSIONS[berard_framework_extension.MODULE_TAG] = berard_framework_extension
 if tsb_casimir_extension is not None:
     MODULE_EXTENSIONS[tsb_casimir_extension.MODULE_TAG] = tsb_casimir_extension
 if tsb_research_extension is not None:

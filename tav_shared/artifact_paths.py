@@ -59,6 +59,7 @@ class TestSlug:
     FRB = "frb_analysis"
     SPARC = "sparc_analysis"
     TAV_RESONANCE = "tav_resonance"
+    BERARD = "berard_framework"
     LHCb = "lhcb_echo"
     RGC = "rgc_mock_catalog"
     PRIME_PAST = "prime_past_bbn"

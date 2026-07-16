@@ -89,13 +89,33 @@ def compute_weighted_mod7(n_muon_array: np.ndarray, event_weights: Optional[np.n
             "mod7_residues": None,
         }
     fracs = mod7_fractions_from_histogram(hist)
-    expected = total / 7.0
-    chi2, pval = stats.chisquare(hist, f_exp=[expected] * 7)
+    expected_uniform = total / 7.0
+    chi2_uniform, pval_uniform = stats.chisquare(hist, f_exp=[expected_uniform] * 7)
+    chi2_trigger = chi2_uniform
+    pval_trigger = pval_uniform
+    trigger_fractions = None
+    if mod_residues is not None and mod_residues.size > 0:
+        from menus.particle.cms.hep_statistics import (
+            mod7_analysis_package,
+            trigger_aware_mod7_expected_fractions,
+        )
+
+        pack = mod7_analysis_package(mod_residues.astype(np.int64))
+        trigger_fractions = pack.get("trigger_aware_expected_fractions")
+        chi2_trigger = float(pack.get("chi2_mod7_vs_trigger_aware") or chi2_uniform)
+        pval_trigger = float(pack.get("chi2_mod7_vs_trigger_aware_pvalue") or pval_uniform)
     return {
         "histogram": hist.tolist(),
         "fractions": fracs,
-        "chi2_vs_uniform": float(chi2),
-        "pvalue": float(pval),
+        "chi2_vs_uniform": float(chi2_uniform),
+        "pvalue_vs_uniform": float(pval_uniform),
+        "chi2_vs_trigger_aware": float(chi2_trigger),
+        "pvalue_vs_trigger_aware": float(pval_trigger),
+        "trigger_aware_expected_fractions": trigger_fractions,
+        "null_hypothesis_warning": (
+            "Uniform 1/7 null is incorrect for DoubleMu-triggered samples."
+        ),
+        "pvalue": float(pval_uniform),
         "total_weighted_events": float(total),
         "mod7_residues": mod_residues.tolist() if mod_residues is not None else None,
     }
@@ -206,6 +226,7 @@ def run_full_validation(
     verbose: bool = True,
     chunk_size: int = 500_000,
     entry_stop: Optional[int] = None,
+    dataset_provenance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     data_basename = Path(data_file).stem if data_file else "cms_validation"
     dataset_slug = compose_dataset_slug(data_basename)
@@ -228,6 +249,8 @@ def run_full_validation(
         "run_dir": str(out_dir),
         "dataset_slug": dataset_slug,
     }
+    if dataset_provenance:
+        results["dataset_provenance"] = dataset_provenance
     weight_dict = load_pileup_weights(pileup_weight_dict)
     weighted_mc_hists: Dict[str, np.ndarray] = {}
     mc_weighting_realignment: Optional[Dict[str, Any]] = None

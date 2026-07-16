@@ -23,6 +23,8 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 from menus.empirical_tests.tests import fetch_empirical_data as _shared_fetch_empirical
+from tav_shared.ingestion import get_runtime_data_manager
+from tav_shared.ingestion.pipeline import validate_and_normalize_bbn_payload
 from tav_shared.tav_project_paths import TAU_SUPERBLOCK_ROOT
 
 ARTIFACTS_DIR = TAU_SUPERBLOCK_ROOT / "artifacts" / "prime_past"
@@ -51,7 +53,7 @@ def fetch_empirical_data(*, verbose: bool = False) -> dict[str, Any]:
     raw = _shared_fetch_empirical(verbose=verbose)
     bbn = raw["bbn_abundances"]
     nl = raw["neutron_lifetime"]
-    return {
+    raw = {
         "neutron_lifetime": {
             "bottle": float(nl["bottle_method"]),
             "beam": float(nl["beam_method"]),
@@ -69,6 +71,14 @@ def fetch_empirical_data(*, verbose: bool = False) -> dict[str, Any]:
             ),
         },
     }
+    validated, report = validate_and_normalize_bbn_payload(
+        raw,
+        strict=False,
+        data_manager=get_runtime_data_manager(),
+    )
+    if verbose and report.n_rejected:
+        print(f"[BBN] Ingestion validation rejected empirical payload: {report.messages}")
+    return validated if report.ok else raw
 
 
 def tav_interference_delta(T: float, params: dict[str, Any]) -> float:
@@ -323,6 +333,7 @@ def save_scan_report(
     best: dict[str, Any],
     *,
     empirical: dict[str, Any] | None = None,
+    empirical_provenance: dict[str, Any] | None = None,
     prefix: str = "tav_bbn_scan",
     also_cwd: bool = True,
 ) -> str:
@@ -339,6 +350,8 @@ def save_scan_report(
         "best": best,
         "empirical": empirical,
     }
+    if empirical_provenance:
+        payload["empirical_provenance"] = empirical_provenance
     text = json.dumps(payload, indent=2, default=float) + "\n"
     path.write_text(text, encoding="utf-8")
     print(f"[TAV ENGINE] Results saved to {path}")

@@ -9,6 +9,9 @@ pandas>=2.2
 astropy>=6.0
 healpy>=1.14
 
+# Schema validation (ingestion pipelines)
+pydantic>=2.0
+
 # Data I/O (Planck FITS, ROOT, remote catalogs)
 requests>=2.31
 gwdatafind>=2.1

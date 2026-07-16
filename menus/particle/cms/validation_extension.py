@@ -20,10 +20,12 @@ SUBMENU_TITLE = "CMS Validation"
 
 MENU_ACTIONS = [
     "Run MC Validation Suite",
+    "Preregistered Recoil q_T Study (HEP Controls)",
 ]
 
 _ACTION_KEYS: dict[str, str] = {
     "Run MC Validation Suite": "run_validation",
+    "Preregistered Recoil q_T Study (HEP Controls)": "preregistered_recoil",
 }
 
 _RUN_FOLDER_RE = re.compile(
@@ -175,6 +177,84 @@ def _cached_cms_dataset_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def ensure_validation_datasets(
+    *,
+    data_key: str | None = None,
+    mc_keys: list[str] | None = None,
+    prefetch_option3: bool = True,
+    prefetch_option4: bool = False,
+    verbose: bool = True,
+) -> dict[str, Any]:
+    """
+    Pull→cache datasets required for CMS validation comparisons (project norm).
+
+    Uses CERN Open Data auto_fetch when files are missing locally, then logs
+    resolved paths for downstream ingestion/comparison pipelines.
+    """
+    from menus.particle.cern.fetcher import ensure_cern_target
+
+    data_key = (data_key or _PREFERRED_DATA_KEY).strip()
+    provenance: dict[str, Any] = {
+        "pipeline": "pull_cache_log",
+        "data_key": data_key,
+        "mc_keys": list(mc_keys or []),
+        "fetched": [],
+        "cached": [],
+        "failed": {},
+        "resolved_paths": {},
+    }
+
+    def _ensure_one(key: str) -> str | None:
+        try:
+            path = ensure_cern_target(key, auto_fetch=True)
+            tag = "cached"
+            if key not in {row.get("key") for row in provenance["cached"]}:
+                provenance["cached"].append({"key": key, "path": str(path), "source": tag})
+            provenance["resolved_paths"][key] = str(path)
+            if verbose:
+                print(f"[MC VALIDATION] Dataset ready: {key} → {path}")
+            return str(path)
+        except Exception as exc:
+            provenance["failed"][key] = str(exc)
+            if verbose:
+                print(f"[MC VALIDATION] Dataset fetch failed: {key} — {exc}")
+            return None
+
+    _ensure_one(data_key)
+    for mc_key in mc_keys or []:
+        _ensure_one(str(mc_key).strip())
+
+    if prefetch_option3:
+        try:
+            from menus.particle.cms.tav_mc_stack_option3 import ensure_option3_mc_cached
+
+            provenance["option3_prefetch"] = ensure_option3_mc_cached(
+                verbose=verbose,
+                auto_fetch=True,
+            )
+        except Exception as exc:
+            provenance["option3_prefetch"] = {"failed": str(exc)}
+            if verbose:
+                print(f"[MC VALIDATION] Option 3 prefetch warning: {exc}")
+
+    if prefetch_option4:
+        try:
+            from menus.particle.cms.tav_photon_crosscheck_option4 import (
+                ensure_option4_photon_cached,
+            )
+
+            provenance["option4_prefetch"] = ensure_option4_photon_cached(
+                verbose=verbose,
+                auto_fetch=True,
+            )
+        except Exception as exc:
+            provenance["option4_prefetch"] = {"failed": str(exc)}
+            if verbose:
+                print(f"[MC VALIDATION] Option 4 prefetch warning: {exc}")
+
+    return provenance
+
+
 def discover_mc_validation_defaults() -> dict[str, Any]:
     """
     Resolve default Data + MC inputs for the validation suite.
@@ -317,6 +397,35 @@ def resolve_mc_validation_mc_files(raw: str) -> list[str]:
 
 
 def entry_fields(action: str) -> list[dict]:
+    if action == "Preregistered Recoil q_T Study (HEP Controls)":
+        return [
+            {
+                "key": "data_file",
+                "label": "DoubleMuParked NanoAOD ROOT",
+                "default": "",
+                "required": False,
+                "hint": "Blank = auto-discover cms_nanoaod_dimu cached dataset",
+            },
+            {
+                "key": "entry_stop",
+                "label": "Max events (0 = full file)",
+                "default": "50000",
+                "required": False,
+                "hint": "Smoke test: 50000; production: 0",
+            },
+            {
+                "key": "n_shuffle_toys",
+                "label": "Event-order shuffle toys",
+                "default": "20",
+                "required": False,
+            },
+            {
+                "key": "output_dir",
+                "label": "Output directory",
+                "default": "",
+                "required": False,
+            },
+        ]
     if action == "Run MC Validation Suite":
         defaults = discover_mc_validation_defaults()
         data_choices = [row["label"] for row in _dataset_choice_rows()]
@@ -500,12 +609,24 @@ def entry_fields(action: str) -> list[dict]:
 
 def entry_instructions(action: str) -> list[str]:
     defaults = discover_mc_validation_defaults()
+    if action == "Preregistered Recoil q_T Study (HEP Controls)":
+        return [
+            "Critique upgrade (2026-07-15): frozen q_T signal window 0.25–0.40 GeV, fine 10 MeV bins.",
+            "Uses q_T = |pT1_vec + pT2_vec| (system_pt), acoplanarity α, and pt-balance observables.",
+            "Trigger-aware mod-7 null — residue-2 peak expected from dimuon trigger (not new physics).",
+            "Null tests: event-order shuffle, chunk/stride partition sensitivity, split-sample stability.",
+            "Classification: EXPLORATORY_PIPELINE_ANOMALY — not a discovery claim.",
+            "SMHiggsToZZTo4L is signal MC only; use Option 3 DY+tt̄ stack for background shapes.",
+            f"Default data: {defaults.get('data_label') or defaults.get('data_file') or 'cms_nanoaod_dimu'}.",
+        ]
     lines = [
         "Run the full TAV CMS MC validation suite: plots, JSON summary, and tables.",
         f"Auto-discovered data default: {defaults.get('data_label') or defaults.get('data_file')}.",
         f"Auto-discovered MC default: {', '.join(defaults.get('mc_labels') or defaults.get('mc_files') or [])}.",
         "Leave fields blank to use latest validation run or cached datasets/cern/.",
         "Leave Output directory blank to create a canonical artifacts/cern_analysis run directory.",
+        "Engine scores are internal metrics — not particle-physics significance (12σ cap removed from reporting).",
+        "Higgs MC = dedicated H→4ℓ signal; inclusive dimuon comparisons require DY+HF stack (Option 3).",
         "Enhanced v2 adds weighted 7-fold diagnostics, photon kinematics hooks, and multi-MC shape tests.",
         "Option A (Phase 4, recommended) sweeps recoil 15/30/45 GeV with ΔR≤1.5 validation gate (no Δφ joint cut).",
         "Option 2 tight cuts (optional) adds aggressive Δφ≥2.5, recoil≤15 GeV pT scan.",
@@ -523,12 +644,65 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
     if action is None:
         return None
 
+    if action == "preregistered_recoil":
+        data_file = resolve_mc_validation_query(
+            str(options.get("data_file") or ""),
+            field="data",
+        )
+        if not data_file:
+            defaults = discover_mc_validation_defaults()
+            data_file = defaults.get("data_file") or defaults.get("data_label")
+        if not data_file:
+            raise ValueError("data_file required (no cached DoubleMu dataset found)")
+
+        dataset_provenance = ensure_validation_datasets(
+            data_key=str(data_file),
+            prefetch_option3=False,
+            prefetch_option4=False,
+            verbose=True,
+        )
+
+        from menus.particle.cern.fetcher import resolve_root_path
+        from menus.particle.cms.preregistered_recoil_study import run_preregistered_recoil_study
+
+        resolved = resolve_root_path(data_file)
+        resolved_data = str(resolved) if resolved is not None else data_file
+        try:
+            entry_stop_raw = int(str(options.get("entry_stop") or "0").strip())
+        except ValueError:
+            entry_stop_raw = 0
+        entry_stop = entry_stop_raw if entry_stop_raw > 0 else None
+        try:
+            n_shuffle = int(str(options.get("n_shuffle_toys") or "20").strip())
+        except ValueError:
+            n_shuffle = 20
+        output_dir = (options.get("output_dir") or "").strip() or None
+
+        report = run_preregistered_recoil_study(
+            resolved_data,
+            output_dir=output_dir,
+            entry_stop=entry_stop,
+            n_shuffle_toys=n_shuffle,
+            verbose=True,
+        )
+        report["dataset_provenance"] = dataset_provenance
+        if report.get("report_path"):
+            Path(report["report_path"]).write_text(
+                json.dumps(report, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        return str(report.get("report_path") or report.get("aggregate_verdict"))
+
     if action == "run_validation":
         data_file = resolve_mc_validation_query(
             str(options.get("data_file") or ""),
             field="data",
         )
         mc_files = resolve_mc_validation_mc_files(str(options.get("mc_files") or ""))
+        if not data_file or not mc_files:
+            defaults = discover_mc_validation_defaults()
+            data_file = data_file or defaults.get("data_file")
+            mc_files = mc_files or list(defaults.get("mc_files") or [])
         output_dir = (options.get("output_dir") or "").strip()
         pileup = (options.get("pileup_reweight") or "yes").strip().lower() in ("yes", "y", "true", "1")
         pileup_profile_raw = (options.get("pileup_data_profile") or "").strip()
@@ -586,29 +760,20 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
             "true",
             "1",
         )
-        if prefetch:
-            try:
-                from menus.particle.cms.tav_mc_stack_option3 import ensure_option3_mc_cached
-
-                ensure_option3_mc_cached(verbose=True, auto_fetch=True)
-            except Exception as exc:
-                print(f"[MC VALIDATION] Option 3 prefetch warning: {exc}")
-
         prefetch_photon = (options.get("prefetch_option4_photon") or "yes").strip().lower() in (
             "yes",
             "y",
             "true",
             "1",
         )
-        if prefetch_photon:
-            try:
-                from menus.particle.cms.tav_photon_crosscheck_option4 import (
-                    ensure_option4_photon_cached,
-                )
 
-                ensure_option4_photon_cached(verbose=True, auto_fetch=True)
-            except Exception as exc:
-                print(f"[MC VALIDATION] Option 4 prefetch warning: {exc}")
+        dataset_provenance = ensure_validation_datasets(
+            data_key=data_file or _PREFERRED_DATA_KEY,
+            mc_keys=mc_files,
+            prefetch_option3=prefetch,
+            prefetch_option4=prefetch_photon,
+            verbose=True,
+        )
 
         if not data_file or not mc_files:
             raise ValueError("data_file and mc_files are required (no cached datasets found)")
@@ -669,6 +834,7 @@ def run_action(selection: str, show_plots: bool = True, options: dict | None = N
             data_file=resolved_data_file,
             mc_files=resolved_mc_files,
             output_dir=final_output_dir,
+            dataset_provenance=dataset_provenance,
             pileup_data_profile=pileup_data_profile,
             lepton_sf=lepton_sf,
             photon_sf=photon_sf,

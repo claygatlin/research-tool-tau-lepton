@@ -544,6 +544,10 @@ def _mod7_discrepancy_metrics(
     data = data[:7]
     mc = mc[:7]
     delta = mc - data
+    from tav_shared.dataset_comparison.tolerance import tolerant_diff
+
+    bin0_tol = tolerant_diff(float(data[0]), float(mc[0]), label="histogram_fraction")
+    bin2_tol = tolerant_diff(float(data[2]), float(mc[2]), label="histogram_fraction")
     return {
         "data_peak_mod7": _mod7_peak_bin(data),
         "mc_peak_mod7": _mod7_peak_bin(mc),
@@ -554,6 +558,8 @@ def _mod7_discrepancy_metrics(
         "delta_mod7_bin0": float(delta[0]),
         "delta_mod7_bin2": float(delta[2]),
         "mod7_l1_distance": float(np.sum(np.abs(delta))),
+        "delta_mod7_bin0_tolerant": bin0_tol,
+        "delta_mod7_bin2_tolerant": bin2_tol,
     }
 
 
@@ -985,6 +991,13 @@ def normalize_dimuon_events(data_events: Any) -> dict[str, np.ndarray]:
             }
             if data_events.get("n_true_int") is not None:
                 out["n_true_int"] = np.asarray(data_events["n_true_int"], dtype=int).ravel()
+            if out["leading_pt"].size > 0:
+                try:
+                    from tav_shared.dataset_comparison.keys import sort_by_primary_keys
+
+                    return sort_by_primary_keys(out)
+                except (KeyError, ValueError):
+                    pass
             return out
 
         pt_key = "Muon_pt" if "Muon_pt" in data_events else "muon_pt"
@@ -1600,6 +1613,9 @@ def enhanced_data_vs_mc_comparison(
     Multi-MC Data vs MC comparison with weighted 7-fold diagnostics and
     explicit background template subtraction.
     """
+    from tav_shared.dataset_comparison.pipeline import compare_histogram_pair
+    from tav_shared.dataset_comparison.tolerance import tolerant_diff
+
     data = _as_1d(data_hist)
     if data.size < 4:
         return {"verdict": "UNDERPOWERED"}
@@ -1624,7 +1640,12 @@ def enhanced_data_vs_mc_comparison(
         _, mc_res, _ = weighted_exponential_detrend(xx, mc, mc_weights.get(name))
         _, _, mc_amp = _fit_7periodic(xx[: mc_res.size], mc_res)
         results[f"{name}_7fold_amplitude"] = float(mc_amp)
-        results[f"delta_subharmonic_{name}"] = float(abs(data_amp - mc_amp))
+        amp_delta = float(abs(data_amp - mc_amp))
+        results[f"delta_subharmonic_{name}"] = amp_delta
+        results[f"delta_subharmonic_{name}_tolerant"] = tolerant_diff(
+            data_amp, mc_amp, label="amplitude"
+        )
+        results[f"pt_shape_{name}"] = compare_histogram_pair(data, mc)
 
     if background_names is None:
         background_names = _default_background_names(mc_samples)

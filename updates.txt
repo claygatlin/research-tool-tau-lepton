@@ -1,0 +1,6 @@
+### 3. Key Upgrades for Rigour
+
+- **Global Fetch Enforcement:** The `DataManager` now acts as the sole entry point for data acquisition. By requiring a `data_key` for every fetch, the pipeline ensures all tracers are registered and cached automatically.
+- **Logging Policy:** All data operations are now written to `research_tool.log`. This solves the issue of "hidden" diagnostic failures by creating a persistent trail of every fetch, cache-hit, and computation error.
+- **Mock Data Fallback:** The `use_mock` flag allows you to validate the `TAV Engine` pipelines even when real CERN/DESI data is unavailable, ensuring that logic errors (like the `str` attribute error) are caught in the simulation phase.
+- **Constraint Hardening:** The test suite now explicitly checks for $n \ge 8$ before proceeding, preventing the `tav_resonance` periodogram from attempting to run on underpowered data.

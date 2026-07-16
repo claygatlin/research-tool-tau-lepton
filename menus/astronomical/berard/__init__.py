@@ -1,0 +1,1 @@
+"""Berard resonance-field cosmology framework (tau-cosmology-berard-framework)."""
