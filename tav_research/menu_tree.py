@@ -91,6 +91,11 @@ def build_menu_tree():
         submenus[registry.cern_opendata_extension.SUBMENU_TITLE] = append_reset_option(
             list(registry.cern_opendata_extension.MENU_ACTIONS)
         )
+    # --- NEW: Tau Lepton 1/7 Mode ---
+    if getattr(registry, "tau_lepton_extension", None) is not None:
+        submenus[registry.tau_lepton_extension.SUBMENU_TITLE] = append_reset_option(
+            list(registry.tau_lepton_extension.MENU_ACTIONS)
+        )
 
     repos = {
         "Astronomical (Conformal Shadows)": [
@@ -144,6 +149,12 @@ def build_menu_tree():
             *(
                 [registry.tsb_casimir_extension.SUBMENU_TITLE]
                 if registry.tsb_casimir_extension is not None
+                else []
+            ),
+            # --- NEW: Tau Lepton 1/7 Mode ---
+            *(
+                [registry.tau_lepton_extension.SUBMENU_TITLE]
+                if getattr(registry, "tau_lepton_extension", None) is not None
                 else []
             ),
             "HEPData (Numerical Correlation)",

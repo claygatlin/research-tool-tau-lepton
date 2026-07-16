@@ -122,6 +122,14 @@ except ImportError as _cern_import_error:
 else:
     CERN_IMPORT_ERROR = None
 
+try:
+    import menus.particle.tau_lepton.extension as tau_lepton_extension
+except ImportError as _tau_lepton_import_error:
+    tau_lepton_extension = None
+    TAU_LEPTON_IMPORT_ERROR = _tau_lepton_import_error
+else:
+    TAU_LEPTON_IMPORT_ERROR = None
+
 # =============================================================================
 # BLOCK: MODULE_EXTENSIONS map (tag → extension module)
 # =============================================================================
@@ -159,7 +167,8 @@ if lisa_pre_runs_extension is not None:
     MODULE_EXTENSIONS[lisa_pre_runs_extension.MODULE_TAG] = lisa_pre_runs_extension
 if cern_opendata_extension is not None:
     MODULE_EXTENSIONS[cern_opendata_extension.MODULE_TAG] = cern_opendata_extension
-
+if tau_lepton_extension is not None:
+    MODULE_EXTENSIONS[tau_lepton_extension.MODULE_TAG] = tau_lepton_extension
 
 # =============================================================================
 # BLOCK: Dispatch helpers
